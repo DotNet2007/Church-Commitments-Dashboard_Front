@@ -1,4 +1,17 @@
 
+export type CommitmentFrequency =
+  | "MONTHLY"
+  | "QUARTERLY"
+  | "HALF_YEARLY"
+  | "YEARLY";
+
+export interface CommitmentRate {
+  memberId: number;
+  amountPerPeriod: string;
+  frequency: CommitmentFrequency;
+  normalizedMonthlyEquivalent: string;
+}
+
 export interface DashboardStats {
   activeMembers: number;
   totalDue: number;
@@ -6,6 +19,7 @@ export interface DashboardStats {
   remaining: number;
   overdue: number;
   collectionRate: number;
+  totalNormalizedMonthlyEquivalent: string;
 }
 
 export interface DashboardChartItem {
@@ -31,6 +45,7 @@ export interface DashboardPayment {
 
 export interface DashboardResponse {
   stats: DashboardStats;
+  commitmentRates: CommitmentRate[];
   chart: DashboardChartItem[];
   latestPayments: DashboardPayment[];
 }

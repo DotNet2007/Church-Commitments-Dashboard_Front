@@ -10,6 +10,7 @@ import {
 import { toast } from "sonner";
 
 import { createMember } from "../../services/api/membersApi";
+import type { CommitmentFrequency } from "../../services/api/membersApi";
 
 export default function AddMemberPage() {
   const navigate = useNavigate();
@@ -22,15 +23,14 @@ export default function AddMemberPage() {
     String(today.getDate()).padStart(2, "0"),
   ].join("-");
 
-  const monthValue = todayValue.slice(0, 7);
-
   const [values, setValues] = useState({
     FullName: "",
     Phone: "",
     JoiningDate: todayValue,
     Notes: "",
-    MonthlyAmount: "",
-    CommitmentStartMonth: `${monthValue}-01`,
+    AmountPerPeriod: "",
+    Frequency: "MONTHLY" as CommitmentFrequency,
+    EffectiveFrom: todayValue,
   });
 
   const [saving, setSaving] = useState(false);
@@ -45,13 +45,34 @@ export default function AddMemberPage() {
     }));
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
 
-    if (Number(values.MonthlyAmount) <= 0) {
-      toast.error("قيمة الالتزام الشهري يجب أن تكون أكبر من صفر");
-      return;
-    }
+const amountText = values.AmountPerPeriod.trim();
+
+if (!/^\d+(\.\d{1,2})?$/.test(amountText)) {
+  toast.error("أدخل مبلغًا صحيحًا بحد أقصى منزلتين عشريتين");
+  return;
+}
+
+const amountInCents = Math.round(Number(amountText) * 100);
+
+if (!Number.isSafeInteger(amountInCents) || amountInCents <= 0) {
+  toast.error("قيمة الالتزام غير صحيحة");
+  return;
+}
+
+const amount = amountInCents / 100;
+
+  if (
+  !values.EffectiveFrom ||
+  Number.isNaN(Date.parse(`${values.EffectiveFrom}T00:00:00`))
+) {
+  toast.error("يرجى تحديد تاريخ بداية التزام صحيح");
+  return;
+}
 
     setSaving(true);
 
@@ -61,8 +82,9 @@ export default function AddMemberPage() {
         Phone: values.Phone.trim() || undefined,
         JoiningDate: values.JoiningDate,
         Notes: values.Notes.trim() || undefined,
-        MonthlyAmount: Number(values.MonthlyAmount),
-        CommitmentStartMonth: values.CommitmentStartMonth,
+        AmountPerPeriod: amount,
+        Frequency: values.Frequency,
+        EffectiveFrom: values.EffectiveFrom,
       });
 
       toast.success("تم إضافة العضو والالتزام الأول بنجاح");
@@ -82,14 +104,12 @@ export default function AddMemberPage() {
 
   return (
     <div className="add-member-page" dir="rtl">
-
-      {/* Page Header */}
       <div className="page-heading">
         <div>
           <div className="eyebrow">دليل الأعضاء</div>
           <h1>إضافة عضو جديد</h1>
           <p>
-            تسجيل بيانات عضو جديد وإضافة قيمة الالتزام الشهري.
+            تسجيل بيانات عضو جديد وإضافة قيمة الالتزام ودوريته.
           </p>
         </div>
 
@@ -103,9 +123,7 @@ export default function AddMemberPage() {
         </button>
       </div>
 
-      {/* Form Card */}
       <section className="add-member-card">
-
         <div className="add-member-card-header">
           <div className="add-member-icon">
             <UserPlus size={23} />
@@ -118,16 +136,10 @@ export default function AddMemberPage() {
         </div>
 
         <form onSubmit={handleSubmit}>
-
           <div className="add-member-form-body">
-
             <div className="member-form-grid">
-
               <label>
-                <span className="field-label">
-                  اسم العضو *
-                </span>
-
+                <span className="field-label">اسم العضو *</span>
                 <input
                   required
                   minLength={2}
@@ -141,10 +153,7 @@ export default function AddMemberPage() {
               </label>
 
               <label>
-                <span className="field-label">
-                  رقم الهاتف
-                </span>
-
+                <span className="field-label">رقم الهاتف</span>
                 <input
                   maxLength={30}
                   value={values.Phone}
@@ -156,10 +165,7 @@ export default function AddMemberPage() {
               </label>
 
               <label>
-                <span className="field-label">
-                  تاريخ الانضمام *
-                </span>
-
+                <span className="field-label">تاريخ الانضمام *</span>
                 <input
                   required
                   type="date"
@@ -171,66 +177,69 @@ export default function AddMemberPage() {
               </label>
 
               <label>
-                <span className="field-label">
-                  قيمة الالتزام الشهري *
-                </span>
-
+                <span className="field-label">قيمة الالتزام لكل فترة *</span>
                 <input
                   required
                   type="number"
                   min="0.01"
                   max="10000000000000000"
                   step="0.01"
-                  value={values.MonthlyAmount}
+                  value={values.AmountPerPeriod}
                   onChange={(e) =>
-                    set("MonthlyAmount", e.target.value)
+                    set("AmountPerPeriod", e.target.value)
                   }
                   placeholder="500"
                 />
               </label>
 
               <label>
-                <span className="field-label">
-                  بداية الالتزام *
-                </span>
-
-                <input
+                <span className="field-label">دورية الالتزام *</span>
+                <select
                   required
-                  type="month"
-                  value={values.CommitmentStartMonth.slice(0, 7)}
+                  value={values.Frequency}
                   onChange={(e) =>
                     set(
-                      "CommitmentStartMonth",
-                      `${e.target.value}-01`
+                      "Frequency",
+                      e.target.value as CommitmentFrequency
                     )
                   }
-                />
+                >
+                  <option value="MONTHLY">شهري</option>
+                  <option value="QUARTERLY">ربع سنوي</option>
+                  <option value="HALF_YEARLY">نصف سنوي</option>
+                  <option value="YEARLY">سنوي</option>
+                </select>
               </label>
 
-            </div>
-
-           <label className="add-member-notes">
-  <span className="field-label">
-    ملاحظات
-  </span>
-
-  <textarea
-    className="form-input"
-    maxLength={500}
-    rows={4}
-    value={values.Notes}
+            <label>
+  <span className="field-label">بداية الالتزام *</span>
+  <input
+    required
+    type="month"
+    value={values.EffectiveFrom.slice(0, 7)}
     onChange={(e) =>
-      set("Notes", e.target.value)
+      set("EffectiveFrom", e.target.value ? `${e.target.value}-01` : "")
     }
-    placeholder="ملاحظات اختيارية..."
   />
 </label>
+            </div>
 
+            <label className="add-member-notes">
+              <span className="field-label">ملاحظات</span>
+              <textarea
+                className="form-input"
+                maxLength={500}
+                rows={4}
+                value={values.Notes}
+                onChange={(e) =>
+                  set("Notes", e.target.value)
+                }
+                placeholder="ملاحظات اختيارية..."
+              />
+            </label>
           </div>
 
-          {/* Actions */}
           <div className="add-member-actions">
-
             <button
               type="button"
               className="button button-secondary"
@@ -247,14 +256,9 @@ export default function AddMemberPage() {
               disabled={saving}
             >
               <CheckCircle2 size={17} />
-
-              {saving
-                ? "جارٍ الحفظ..."
-                : "إضافة العضو"}
+              {saving ? "جارٍ الحفظ..." : "إضافة العضو"}
             </button>
-
           </div>
-
         </form>
       </section>
     </div>

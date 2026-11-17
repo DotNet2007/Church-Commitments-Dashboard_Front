@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -15,10 +14,7 @@ import { Toaster, toast } from "sonner";
 import NewPaymentModal from "../components/payments/NewPaymentModal";
 import Sidebar from "../components/common/Sidebar";
 import { useAuth } from "../context/AuthContext";
-import {
-  getMembers,
-  type MemberRecord,
-} from "../services/api/membersApi";
+import { getMembers, type MemberRecord } from "../services/api/membersApi";
 
 type Theme = "light" | "dark";
 
@@ -30,16 +26,14 @@ export default function DashboardLayout() {
   const [paymentMemberId, setPaymentMemberId] = useState<number | undefined>();
   const [mobileNav, setMobileNav] = useState(false);
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
-const openPayment = (memberId?: number) => {
-  setPaymentMemberId(memberId);
-  setPaymentModal(true);
-};
+  const openPayment = (memberId?: number) => {
+    setPaymentMemberId(memberId);
+    setPaymentModal(true);
+  };
   const [theme, setTheme] = useState<Theme>(() => {
     if (typeof window === "undefined") return "light";
 
-    return localStorage.getItem("amanah-theme") === "dark"
-      ? "dark"
-      : "light";
+    return localStorage.getItem("amanah-theme") === "dark" ? "dark" : "light";
   });
 
   const profileMenuRef = useRef<HTMLDivElement>(null);
@@ -55,18 +49,16 @@ const openPayment = (memberId?: number) => {
         "/members": "إدارة الأعضاء",
         "/payments": "المدفوعات",
         "/reports": "التقارير المالية",
-        "/audit-logs" :"سجل العمليات",
+        "/audit-logs": "سجل العمليات",
         "/settings": "الإعدادات",
       } as Record<string, string>
     )[location.pathname] ?? "أمانة";
 
-  // Save theme preference
   useEffect(() => {
     localStorage.setItem("amanah-theme", theme);
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Close profile menu when clicking outside or pressing Escape
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
       if (
@@ -92,12 +84,12 @@ const openPayment = (memberId?: number) => {
     };
   }, []);
 
-  // Close menu when navigating to another page
+
   useEffect(() => {
     setProfileMenuOpen(false);
   }, [location.pathname]);
 
-  // Load real members from backend
+
   const loadMembers = useCallback(async (showLoader = true) => {
     if (showLoader) setMembersLoading(true);
 
@@ -106,9 +98,7 @@ const openPayment = (memberId?: number) => {
       setMembers(result);
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "تعذر تحميل بيانات الأعضاء",
+        error instanceof Error ? error.message : "تعذر تحميل بيانات الأعضاء",
       );
     } finally {
       setMembersLoading(false);
@@ -125,8 +115,8 @@ const openPayment = (memberId?: number) => {
     return members.filter(
       (member) =>
         !query ||
-        [member.FullName, member.Phone ?? "", String(member.Id)].some(
-          (value) => value.toLocaleLowerCase().includes(query),
+        [member.FullName, member.Phone ?? "", String(member.Id)].some((value) =>
+          value.toLocaleLowerCase().includes(query),
         ),
     );
   }, [members, search]);
@@ -151,10 +141,7 @@ const openPayment = (memberId?: number) => {
 
   return (
     <div className="app-shell" dir="rtl" data-theme={theme}>
-      <Sidebar
-        mobileNav={mobileNav}
-        onClose={() => setMobileNav(false)}
-      />
+      <Sidebar mobileNav={mobileNav} onClose={() => setMobileNav(false)} />
 
       <main className="main-area">
         <header className="topbar" dir="ltr">
@@ -168,7 +155,7 @@ const openPayment = (memberId?: number) => {
               <Menu size={20} />
             </button>
 
-            {/* User Profile Dropdown */}
+    
             <div className="profile-menu-wrapper" ref={profileMenuRef}>
               <button
                 className={`profile profile-trigger ${
@@ -237,23 +224,17 @@ const openPayment = (memberId?: number) => {
 
             <span className="top-divider" />
 
-            {/* Dark / Light Mode Toggle */}
+       
             <button
               className="icon-button theme-toggle-button"
               type="button"
               onClick={toggleTheme}
               aria-label={
-                theme === "light"
-                  ? "تفعيل الوضع الداكن"
-                  : "تفعيل الوضع الفاتح"
+                theme === "light" ? "تفعيل الوضع الداكن" : "تفعيل الوضع الفاتح"
               }
               title={theme === "light" ? "الوضع الداكن" : "الوضع الفاتح"}
             >
-              {theme === "light" ? (
-                <Moon size={19} />
-              ) : (
-                <Sun size={19} />
-              )}
+              {theme === "light" ? <Moon size={19} /> : <Sun size={19} />}
             </button>
           </div>
 
@@ -276,22 +257,22 @@ const openPayment = (memberId?: number) => {
           />
 
           <footer className="page-footer">
-            أمانة لإدارة الالتزامات المالية <span>•</span> جميع الحقوق
-            محفوظة 2024
+            أمانة لإدارة الالتزامات المالية <span>•</span> جميع الحقوق محفوظة
+            2024
           </footer>
         </div>
       </main>
 
       {paymentModal && (
-      <NewPaymentModal
-  members={members}
-  initialMemberId={paymentMemberId}
- onClose={() => {
-  setPaymentModal(false);
-  setPaymentMemberId(undefined);
-}}
-  onSuccess={handlePaymentSuccess}
-/>
+        <NewPaymentModal
+          members={members}
+          initialMemberId={paymentMemberId}
+          onClose={() => {
+            setPaymentModal(false);
+            setPaymentMemberId(undefined);
+          }}
+          onSuccess={handlePaymentSuccess}
+        />
       )}
 
       <Toaster position="top-left" richColors theme={theme} />

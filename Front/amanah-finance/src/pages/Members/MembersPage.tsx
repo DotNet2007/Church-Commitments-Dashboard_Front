@@ -10,7 +10,6 @@ import {
 import PageTitle from "../../components/common/PageTitle";
 import type { MemberRecord } from "../../services/api/membersApi";
 
-
 const money = (value: string | number) =>
   `${Number(value).toLocaleString("en-US", { maximumFractionDigits: 2 })} ج.م`;
 
@@ -53,39 +52,36 @@ export default function MembersPage({
         title="إدارة الأعضاء"
         description="تابع بيانات الأعضاء والتزاماتهم الشهرية من مكان واحد."
         action={
-          <button
-            className="button button-primary"
-            onClick={onAddPayment}
-          >
+          <button className="button button-primary" onClick={onAddPayment}>
             <Plus size={17} />
             تسجيل دفعة جديدة
           </button>
         }
       />
-    <section className="filter-panel members-filter-panel">
-  <div className="search-field">
-    <Search size={15} />
-    <input
-      placeholder="ابحث بالاسم أو المعرف أو رقم الهاتف"
-      value={search}
-      onChange={(e) => setSearch(e.target.value)}
-    />
-  </div>
+      <section className="filter-panel members-filter-panel">
+        <div className="search-field">
+          <Search size={15} />
+          <input
+            placeholder="ابحث بالاسم أو المعرف أو رقم الهاتف"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
 
-  <div className="filter-row">
-    <SlidersHorizontal size={14} />
+        <div className="filter-row">
+          <SlidersHorizontal size={14} />
 
-    {["الكل", "نشط", "مغلق"].map((item) => (
-      <button
-        key={item}
-        className={`filter-chip ${filter === item ? "selected" : ""}`}
-        onClick={() => setFilter(item)}
-      >
-        {item}
-      </button>
-    ))}
-  </div>
-</section>
+          {["الكل", "نشط", "مغلق"].map((item) => (
+            <button
+              key={item}
+              className={`filter-chip ${filter === item ? "selected" : ""}`}
+              onClick={() => setFilter(item)}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+      </section>
       <section className="members-section">
         <div className="list-heading">
           <div>
@@ -105,7 +101,7 @@ export default function MembersPage({
                   <th>اسم العضو</th>
                   <th>رقم الهاتف</th>
                   <th>تاريخ الانضمام</th>
-                  <th>الالتزام الشهري الحالي</th>
+                  <th>قيمة الالتزام لكل فترة</th>
                   <th>الحالة</th>
                   <th>ملاحظات</th>
                   <th>الإجراءات</th>
@@ -113,17 +109,24 @@ export default function MembersPage({
               </thead>
               <tbody>
                 {members.map((member) => {
-                  // The members list endpoint currently returns only Id, MonthlyAmount,
-                  // and EffectiveFrom for nested commitments (EffectiveTo is omitted).
-                  // Prefer an explicitly active commitment when EffectiveTo is present;
-                  // otherwise use the most recent commitment returned by the API.
                   const commitments = member.Commitments ?? [];
-                  const current =
-                    commitments.find((item) => item.EffectiveTo == null) ??
-                    [...commitments].sort(
-                      (a, b) =>
-                        new Date(b.EffectiveFrom).getTime() -
-                        new Date(a.EffectiveFrom).getTime(),
+                  const today = new Date();
+
+                  const todayKey = [
+                    today.getFullYear(),
+                    String(today.getMonth() + 1).padStart(2, "0"),
+                    String(today.getDate()).padStart(2, "0"),
+                  ].join("-");
+
+                  const current = commitments
+                    .filter((item) => {
+                      const start = item.EffectiveFrom.slice(0, 10);
+                      const end = item.EffectiveTo?.slice(0, 10);
+
+                      return start <= todayKey && (!end || end >= todayKey);
+                    })
+                    .sort((a, b) =>
+                      b.EffectiveFrom.localeCompare(a.EffectiveFrom),
                     )[0];
                   return (
                     <tr
@@ -156,7 +159,20 @@ export default function MembersPage({
                       <td>{member.Phone || "—"}</td>
                       <td>{date(member.JoiningDate)}</td>
                       <td className="amount-cell">
-                        {current ? money(current.MonthlyAmount) : "—"}
+                        {current ? (
+                          <>
+                            <strong>{money(current.AmountPerPeriod)}</strong>
+                            <div className="text-muted">
+                              {current.Frequency === "MONTHLY" && "شهري"}
+                              {current.Frequency === "QUARTERLY" && "ربع سنوي"}
+                              {current.Frequency === "HALF_YEARLY" &&
+                                "نصف سنوي"}
+                              {current.Frequency === "YEARLY" && "سنوي"}
+                            </div>
+                          </>
+                        ) : (
+                          "—"
+                        )}
                       </td>
                       <td>
                         <span

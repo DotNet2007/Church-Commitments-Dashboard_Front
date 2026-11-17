@@ -90,14 +90,6 @@ export const router = createBrowserRouter([
               </LazyPage>
             ),
           },
-          // {
-          //   path: "reports",
-          //   element: (
-          //     <LazyPage>
-          //       <ReportsPage />
-          //     </LazyPage>
-          //   ),
-          // },
           {
             path: "audit-logs",
             element: (

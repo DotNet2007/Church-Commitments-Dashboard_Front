@@ -7,14 +7,28 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { clearStoredToken, getStoredToken } from "../services/api/api";
-import { getCurrentUser, loginRequest, type AuthUser } from "../services/api/authApi";
+
+import {
+  ApiError,
+  clearStoredToken,
+  getStoredToken,
+} from "../services/api/api";
+
+import {
+  getCurrentUser,
+  loginRequest,
+  type AuthUser,
+} from "../services/api/authApi";
 
 type AuthContextValue = {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (username: string, password: string, remember: boolean) => Promise<void>;
+  login: (
+    username: string,
+    password: string,
+    remember: boolean,
+  ) => Promise<void>;
   logout: () => void;
 };
 
@@ -26,46 +40,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+
     const token = getStoredToken();
 
     if (!token) {
       setIsLoading(false);
-      return () => { active = false; };
+
+      return () => {
+        active = false;
+      };
     }
 
     getCurrentUser()
       .then((currentUser) => {
-        if (active) setUser(currentUser);
+        if (active) {
+          setUser(currentUser);
+        }
       })
-      .catch(() => {
-        clearStoredToken();
-        if (active) setUser(null);
+      .catch((error: unknown) => {
+        if (!active) return;
+
+        // Clear token only when it is actually invalid.
+        if (error instanceof ApiError && error.status === 401) {
+          clearStoredToken();
+          setUser(null);
+          return;
+        }
+
+        // Keep the token if the server is temporarily unavailable.
+        setUser(null);
       })
       .finally(() => {
-        if (active) setIsLoading(false);
+        if (active) {
+          setIsLoading(false);
+        }
       });
 
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, []);
 
-  const login = useCallback(async (username: string, password: string, remember: boolean) => {
-    const response = await loginRequest(username, password);
-    if (!response.accessToken) {
-      throw new Error("لم يرجع الخادم accessToken في استجابة تسجيل الدخول.");
-    }
+  const login = useCallback(
+    async (username: string, password: string, remember: boolean) => {
+      const response = await loginRequest(username, password);
 
-    clearStoredToken();
-    const storage = remember ? localStorage : sessionStorage;
-    storage.setItem("accessToken", response.accessToken);
+      if (!response.accessToken) {
+        throw new Error("لم يرجع الخادم accessToken في استجابة تسجيل الدخول.");
+      }
 
-    try {
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-    } catch (error) {
       clearStoredToken();
-      throw error;
-    }
-  }, []);
+
+      const storage = remember ? localStorage : sessionStorage;
+
+      storage.setItem("accessToken", response.accessToken);
+
+      try {
+        const currentUser = await getCurrentUser();
+
+        setUser(currentUser);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          clearStoredToken();
+        }
+
+        setUser(null);
+
+        throw error;
+      }
+    },
+    [],
+  );
 
   const logout = useCallback(() => {
     clearStoredToken();
@@ -73,7 +118,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, isAuthenticated: Boolean(user), isLoading, login, logout }),
+    () => ({
+      user,
+      isAuthenticated: Boolean(user),
+      isLoading,
+      login,
+      logout,
+    }),
     [user, isLoading, login, logout],
   );
 
@@ -82,6 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error("useAuth must be used inside AuthProvider");
+
+  if (!context) {
+    throw new Error("useAuth must be used inside AuthProvider");
+  }
+
   return context;
 }

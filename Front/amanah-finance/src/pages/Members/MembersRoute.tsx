@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate ,useLocation, useOutletContext } from "react-router-dom";
+import { useNavigate, useLocation, useOutletContext } from "react-router-dom";
 import { toast } from "sonner";
 import MembersPage from "./MembersPage";
 import MemberFormModal, { type MemberFormValues } from "./MemberFormModal";
@@ -33,17 +33,13 @@ const getStoredClosedMembers = (): MemberRecord[] => {
 };
 
 const saveStoredClosedMembers = (members: MemberRecord[]) => {
-  localStorage.setItem(
-    CLOSED_MEMBERS_KEY,
-    JSON.stringify(members),
-  );
+  localStorage.setItem(CLOSED_MEMBERS_KEY, JSON.stringify(members));
 };
 export default function MembersRoute() {
   const navigate = useNavigate();
   const location = useLocation();
 
-const { openPayment } =
-  useOutletContext<DashboardContext>();
+  const { openPayment } = useOutletContext<DashboardContext>();
   const [members, setMembers] = useState<MemberRecord[]>([]);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("الكل");
@@ -58,17 +54,17 @@ const { openPayment } =
     setError(null);
     try {
       const result = await getMembers();
-const storedClosedMembers = getStoredClosedMembers();
+      const storedClosedMembers = getStoredClosedMembers();
 
-const combinedMembers = [
-  ...result,
-  ...storedClosedMembers.filter(
-    (closedMember) =>
-      !result.some((member) => member.Id === closedMember.Id),
-  ),
-];
+      const combinedMembers = [
+        ...result,
+        ...storedClosedMembers.filter(
+          (closedMember) =>
+            !result.some((member) => member.Id === closedMember.Id),
+        ),
+      ];
 
-setMembers(combinedMembers);
+      setMembers(combinedMembers);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "تعذر تحميل الأعضاء";
       setError(message);
@@ -78,40 +74,71 @@ setMembers(combinedMembers);
     }
   }, []);
 
-  useEffect(() => { void loadMembers(); }, [loadMembers]);
+  useEffect(() => {
+    void loadMembers();
+  }, [loadMembers]);
 
   const filteredMembers = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return members.filter((member) => {
-      const matchesSearch = !query || [member.FullName, member.Phone ?? "", String(member.Id)].some((value) => value.toLocaleLowerCase().includes(query));
-      const matchesStatus = filter === "الكل" || (filter === "نشط" && !member.IsClosed) || (filter === "مغلق" && member.IsClosed);
+      const matchesSearch =
+        !query ||
+        [member.FullName, member.Phone ?? "", String(member.Id)].some((value) =>
+          value.toLocaleLowerCase().includes(query),
+        );
+      const matchesStatus =
+        filter === "الكل" ||
+        (filter === "نشط" && !member.IsClosed) ||
+        (filter === "مغلق" && member.IsClosed);
       return matchesSearch && matchesStatus;
     });
   }, [members, search, filter]);
 
-  const openAdd = () => { setEditingMember(null); setFormOpen(true); };
+  const openAdd = () => {
+    setEditingMember(null);
+    setFormOpen(true);
+  };
   useEffect(() => {
-  if (location.state?.openAddMember) {
-    openAdd();
+    if (location.state?.openAddMember) {
+      openAdd();
 
-    navigate(location.pathname, {
-      replace: true,
-      state: null,
-    });
-  }
-}, [location.state, location.pathname, navigate]);
-  const openEdit = (member: MemberRecord) => { setEditingMember(member); setFormOpen(true); };
-
+      navigate(location.pathname, {
+        replace: true,
+        state: null,
+      });
+    }
+  }, [location.state, location.pathname, navigate]);
+  const openEdit = (member: MemberRecord) => {
+    setEditingMember(member);
+    setFormOpen(true);
+  };
   const saveMember = async (values: MemberFormValues) => {
     setSaving(true);
+
     try {
       if (editingMember) {
-        await updateMember(editingMember.Id, {
+        const payload = {
           FullName: values.FullName.trim(),
           Phone: values.Phone.trim() || null,
           JoiningDate: values.JoiningDate,
           Notes: values.Notes.trim() || null,
-        });
+        };
+
+        const updatedMember = await updateMember(editingMember.Id, payload);
+
+        // تحديث العضو مباشرة داخل الـ State
+        setMembers((current) =>
+          current.map((member) =>
+            member.Id === updatedMember.Id
+              ? {
+                  ...member,
+                  ...updatedMember,
+                  Commitments: member.Commitments,
+                }
+              : member,
+          ),
+        );
+
         toast.success("تم تحديث بيانات العضو بنجاح");
       } else {
         await createMember({
@@ -119,16 +146,22 @@ setMembers(combinedMembers);
           Phone: values.Phone.trim() || undefined,
           JoiningDate: values.JoiningDate,
           Notes: values.Notes.trim() || undefined,
-          MonthlyAmount: Number(values.MonthlyAmount),
-          CommitmentStartMonth: values.CommitmentStartMonth,
+          AmountPerPeriod: Number(values.AmountPerPeriod),
+          Frequency: values.Frequency,
+          EffectiveFrom: values.EffectiveFrom,
         });
+
         toast.success("تم إضافة العضو والالتزام الأول بنجاح");
+
+        await loadMembers(false);
       }
+
       setFormOpen(false);
       setEditingMember(null);
-      await loadMembers(false);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "تعذر حفظ بيانات العضو";
+      const message =
+        err instanceof Error ? err.message : "تعذر حفظ بيانات العضو";
+
       toast.error(message);
     } finally {
       setSaving(false);
@@ -140,57 +173,51 @@ setMembers(combinedMembers);
     const confirmed = window.confirm(
       isClosing
         ? `هل أنت متأكد من إغلاق العضو "${member.FullName}"؟`
-        : `هل أنت متأكد من إعادة تفعيل العضو "${member.FullName}"؟`
+        : `هل أنت متأكد من إعادة تفعيل العضو "${member.FullName}"؟`,
     );
 
     if (!confirmed) return;
 
-try {
-  if (isClosing) {
-    await closeMember(member.Id);
+    try {
+      if (isClosing) {
+        await closeMember(member.Id);
 
-    const closedMember = {
-      ...member,
-      IsClosed: true,
-    };
+        const closedMember = {
+          ...member,
+          IsClosed: true,
+        };
 
-    const storedClosedMembers = getStoredClosedMembers();
+        const storedClosedMembers = getStoredClosedMembers();
 
-    saveStoredClosedMembers([
-      ...storedClosedMembers.filter(
-        (item) => item.Id !== member.Id,
-      ),
-      closedMember,
-    ]);
+        saveStoredClosedMembers([
+          ...storedClosedMembers.filter((item) => item.Id !== member.Id),
+          closedMember,
+        ]);
 
-    setMembers((current) =>
-      current.map((item) =>
-        item.Id === member.Id ? closedMember : item,
-      ),
-    );
+        setMembers((current) =>
+          current.map((item) => (item.Id === member.Id ? closedMember : item)),
+        );
 
-    toast.success("تم إغلاق العضو بنجاح");
-  } else {
-    await reopenMember(member.Id);
+        toast.success("تم إغلاق العضو بنجاح");
+      } else {
+        await reopenMember(member.Id);
 
-    const storedClosedMembers = getStoredClosedMembers();
+        const storedClosedMembers = getStoredClosedMembers();
 
-    saveStoredClosedMembers(
-      storedClosedMembers.filter(
-        (item) => item.Id !== member.Id,
-      ),
-    );
+        saveStoredClosedMembers(
+          storedClosedMembers.filter((item) => item.Id !== member.Id),
+        );
 
-    await loadMembers(false);
+        await loadMembers(false);
 
-    toast.success("تم إعادة تفعيل العضو بنجاح");
-  }
-} catch (err: unknown) {
-  const message =
-    err instanceof Error ? err.message : "تعذر تحديث حالة العضو";
+        toast.success("تم إعادة تفعيل العضو بنجاح");
+      }
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "تعذر تحديث حالة العضو";
 
-  toast.error(message);
-}
+      toast.error(message);
+    }
   };
   return (
     <>
@@ -201,13 +228,25 @@ try {
         filter={filter}
         setFilter={setFilter}
         loading={loading}
-        error={error} 
+        error={error}
         onAddPayment={openPayment}
         onEdit={openEdit}
         onView={(member) => navigate(`/members/${member.Id}`)}
-        onToggleStatus={toggleMemberStatus}      
+        onToggleStatus={toggleMemberStatus}
       />
-      {formOpen && <MemberFormModal member={editingMember} saving={saving} onClose={() => { if (!saving) { setFormOpen(false); setEditingMember(null); } }} onSubmit={saveMember} />}
+      {formOpen && (
+        <MemberFormModal
+          member={editingMember}
+          saving={saving}
+          onClose={() => {
+            if (!saving) {
+              setFormOpen(false);
+              setEditingMember(null);
+            }
+          }}
+          onSubmit={saveMember}
+        />
+      )}
     </>
   );
 }

@@ -21,5 +21,7 @@ export async function loginRequest(username: string, password: string) {
 }
 
 export function getCurrentUser() {
-  return apiRequest<AuthUser>("/auth/me");
+  return apiRequest<AuthUser>("/auth/me", {
+    redirectOnUnauthorized: false,
+  });
 }

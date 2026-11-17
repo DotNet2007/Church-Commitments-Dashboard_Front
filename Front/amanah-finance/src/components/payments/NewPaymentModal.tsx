@@ -7,7 +7,10 @@ import {
   type PaymentRecord,
 } from "../../services/api/paymentsApi";
 import { money } from "../../utils/formatters";
-
+import {
+  moneyToCents,
+  centsToMoney,
+} from "../../services/api/commitmentsApi";
 type Props = {
   members: MemberRecord[];
   initialMemberId?: number;
@@ -33,7 +36,6 @@ const [memberSearch, setMemberSearch] = useState(
   initialMember?.FullName ?? ""
 );
 
-
 const [memberDropdownOpen, setMemberDropdownOpen] = useState(false);
 
 const filteredMembers = useMemo(() => {
@@ -55,13 +57,27 @@ const filteredMembers = useMemo(() => {
   const [paymentMethod, setPaymentMethod] = useState<
   "CASH" | "INSTAPAY"
 >("CASH");
-  const [paymentDate, setPaymentDate] = useState(
-    new Date().toISOString().slice(0, 10),
-  );
+ const getLocalDate = () => {
+  const date = new Date();
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+};
+const [paymentDate, setPaymentDate] = useState(getLocalDate);
   const [reference, setReference] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState<PaymentRecord | null>(null);
+
+  const allocatedTotalCents = (result?.Allocations ?? []).reduce(
+    (sum, item) => sum + moneyToCents(item.AllocatedAmount),
+    0,
+  );
+
+  const allocatedTotal = centsToMoney(allocatedTotalCents);
 
   const save = async () => {
     const memberId = Number(selectedMember);
@@ -100,6 +116,11 @@ const filteredMembers = useMemo(() => {
 
       setResult(payment);
       onSuccess?.(payment);
+      window.dispatchEvent(
+        new CustomEvent("amanah:payment-created", {
+          detail: { memberId },
+        }),
+      );
       toast.success("تم تسجيل الدفعة وتوزيعها بنجاح");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "تعذر تسجيل الدفعة");
@@ -344,12 +365,7 @@ const filteredMembers = useMemo(() => {
               <div className="allocation-total">
                 <strong>إجمالي الموزع</strong>
                 <b>
-                  {money(
-                    result.Allocations.reduce(
-                      (sum, item) => sum + Number(item.AllocatedAmount),
-                      0,
-                    ),
-                  )}
+               {money(Number(allocatedTotal))}
                 </b>
               </div>
             </div>

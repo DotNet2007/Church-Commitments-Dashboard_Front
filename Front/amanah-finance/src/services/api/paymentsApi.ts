@@ -1,4 +1,3 @@
-
 import { apiRequest } from "./api";
 
 export interface PaymentAllocation {
@@ -119,4 +118,26 @@ export function updatePaymentReceipt(
     method: "PATCH",
     body: JSON.stringify({ ReceiptNumber: receiptNumber }),
   });
+}
+export interface MemberPaymentAllocation {
+  Id: number;
+  PaymentId: number;
+  CommitmentId: number;
+  PeriodMonth: string;
+  AllocatedAmount: string;
+  CreatedAt: string;
+  Payment: {
+    Id: number;
+    ReceiptNumber: string;
+    PaymentDate: string;
+    PaymentMethod: string;
+    Amount: string;
+  };
+}
+export function getMemberPaymentAllocations(
+  memberId: number,
+): Promise<MemberPaymentAllocation[]> {
+  return apiRequest<MemberPaymentAllocation[]>(
+    `/commitments/member/${memberId}/allocations`,
+  );
 }

@@ -1018,3 +1018,106 @@ closed-member listing endpoints, payment deletion/voiding endpoints,
 manual allocation endpoints, or audit-log mutation endpoints because
 these were not established as available API operations in the documented
 project work.
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+# Frontend handoff: commitment frequencies and changes
+
+All routes below use the API's `/api` prefix and require the existing JWT bearer token. Money in request bodies is a JSON number; money returned from Prisma or calculated periods is generally a decimal string. Display it as money without using JavaScript floating point arithmetic for totals.
+
+## Frequency and dates
+
+`Frequency` is one of `MONTHLY`, `QUARTERLY`, `HALF_YEARLY`, `YEARLY`. `AmountPerPeriod` is the **full amount due once per period**. For example, `300` with `QUARTERLY` means 300 every three months. `normalizedMonthlyEquivalent` is for reporting display only.
+
+An initial commitment can start on any `YYYY-MM-DD` date. A **change** must use the first day of a month (`YYYY-MM-01`). The old commitment ends on the last day of the preceding month; the new one starts at full amount, with no proration.
+
+## Existing routes: what changed
+
+| Route | Frontend change |
+| --- | --- |
+| `POST /api/members` | Create the initial commitment with `AmountPerPeriod`, `Frequency`, `EffectiveFrom`. `Frequency` defaults to `MONTHLY`. The response includes `member` and `commitment`. |
+| `GET /api/members` | Each member's `Commitments` entries now include `Id`, `AmountPerPeriod`, `Frequency`, and `EffectiveFrom`. Do not expect `MonthlyAmount`. |
+| `GET /api/members/:id` | Still returns member fields only. Fetch `/api/commitments/member/:id/current` or `/summary` for commitment details. |
+| `PATCH /api/members/:id` | Still edits member profile fields only (`FullName`, `Phone`, `JoiningDate`, `Notes`). Change the commitment through preview and confirm below. |
+| `GET /api/commitments/member/:memberId` | Commitment history now exposes `AmountPerPeriod`, `Frequency`, and `normalizedMonthlyEquivalent`; newest first. |
+| `GET /api/commitments/member/:memberId/current` | Current commitment with those same fields. Use its `Id` for preview and confirm. |
+| `PATCH /api/commitments/:id` | Now an alias for confirmation and **requires `previewToken`**. Prefer the new `/confirm` route. |
+| `POST /api/payments/member/:memberId` | Request body is unchanged. The API allocates against the actual commitment periods. |
+| `GET /api/payments`, `GET /api/payments/member/:memberId`, `GET /api/payments/:id` | Payment shapes remain. `Allocations[].PeriodMonth` means the **start date of the commitment period**, including quarterly, half-yearly, and yearly periods. Embedded commitments expose `AmountPerPeriod` and `Frequency`. |
+| `GET /api/dashboard` | Existing `stats`, `chart`, and `latestPayments` remain. Adds `stats.totalNormalizedMonthlyEquivalent` (decimal string) and `commitmentRates` with `{ memberId, amountPerPeriod, frequency, normalizedMonthlyEquivalent }` for active members. |
+
+Example member creation:
+
+```json
+{
+  "FullName": "Example Member",
+  "JoiningDate": "2026-01-15",
+  "AmountPerPeriod": 300,
+  "Frequency": "QUARTERLY",
+  "EffectiveFrom": "2026-01-15"
+}
+```
+
+For compatibility, `POST /api/members` also accepts `MonthlyAmount` and `CommitmentStartMonth` for monthly commitments. Send only one amount field. New forms should use the fields above.
+
+## New read routes
+
+| Route | Response |
+| --- | --- |
+| `GET /api/commitments/member/:memberId/periods?through=YYYY-MM-DD` | Array of period objects: `commitmentId`, `periodStart`, `periodEnd`, `amountPerPeriod`, `frequency`, `normalizedMonthlyEquivalent`, `paidAmount`, `outstandingAmount`, `status` (`UNPAID`, `PARTIALLY_PAID`, `PAID`), `overdue` (boolean). `through` defaults to today. |
+| `GET /api/commitments/member/:memberId/outstanding?through=YYYY-MM-DD` | Same period shape, only periods with outstanding amount greater than zero. |
+| `GET /api/commitments/member/:memberId/summary?through=YYYY-MM-DD` | `{ memberId, currentCommitment, amountPerPeriod, frequency, normalizedMonthlyEquivalent, totalOutstanding, totalOverdue, periods }`. `periods` is a count. |
+| `GET /api/commitments/member/:memberId/allocations` | Allocation rows with `PaymentId`, `CommitmentId`, `PeriodMonth`, `AllocatedAmount`, and a nested `Payment` with receipt, date, method, and amount. |
+
+Example period:
+
+```json
+{
+  "commitmentId": 12,
+  "periodStart": "2026-01-15",
+  "periodEnd": "2026-04-14",
+  "amountPerPeriod": "300.00",
+  "frequency": "QUARTERLY",
+  "normalizedMonthlyEquivalent": "100.00",
+  "paidAmount": "100.00",
+  "outstandingAmount": "200.00",
+  "status": "PARTIALLY_PAID",
+  "overdue": true
+}
+```
+
+## Change flow: preview, then confirm
+
+1. Fetch `/api/commitments/member/:memberId/current` and use its `Id` as `:id`.
+2. `POST /api/commitments/:id/preview` with the proposed amount, frequency, and month. This **does not write**.
+3. Show `affectedPeriods`, `existingPaymentsAffected`, `existingAllocations`, `recalculatedAllocations`, `resultingExcessOrCreditAdjustments`, and `summary` to the administrator.
+4. After the administrator confirms, `POST /api/commitments/:id/confirm` with the **same proposal** plus the returned `previewToken`.
+5. Refresh current commitment, history, periods, payments, and dashboard. If confirm returns **409**, the preview is stale: fetch a new preview and ask the administrator to review it again.
+
+Preview request:
+
+```json
+{
+  "AmountPerPeriod": 300,
+  "Frequency": "MONTHLY",
+  "EffectiveStartDate": "2026-08-01"
+}
+```
+
+Confirm request:
+
+```json
+{
+  "AmountPerPeriod": 300,
+  "Frequency": "MONTHLY",
+  "EffectiveStartDate": "2026-08-01",
+  "previewToken": "<token returned by preview>"
+}
+```
+
+Preview returns `previousCommitment`, `proposedCommitment`, `effectiveDate`, `affectedPeriods`, `existingPaymentsAffected`, `existingAllocations`, `recalculatedAllocations`, `resultingExcessOrCreditAdjustments`, `summary`, and `previewToken`. Each affected period has its new expected, paid, outstanding, and status. Confirm returns `message`, `previousCommitment`, `newCommitment`, `reallocatedAllocations`, and `financialImpact`.
+
+The amount is required for a change; omitted `Frequency` inherits the current frequency. Legacy `MonthlyAmount` and `EffectiveFrom` are accepted for monthly changes, but the date must still be `YYYY-MM-01`. New forms should send the new fields. A closed member or a change at/before the current commitment's start returns 400; a missing commitment returns 404.
+
+For the August example (old monthly amount 200, new monthly amount 300, existing August payment 200), preview shows August `expectedAmount: "300.00"`, `paidAmount: "200.00"`, `outstandingAmount: "100.00"`, and `status: "PARTIALLY_PAID"`. Payment transactions and receipts remain unchanged; only affected allocation rows are reassessed.
+

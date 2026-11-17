@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowRight,
   CalendarDays,
@@ -7,6 +7,8 @@ import {
   Pencil,
   Plus,
   CheckCircle2,
+  X,
+  Clock3,
 } from "lucide-react";
 import { useNavigate, useParams, useOutletContext } from "react-router-dom";
 import { toast } from "sonner";
@@ -16,27 +18,50 @@ import {
   reopenMember,
   type MemberRecord,
   type CommitmentRecord,
+  type CommitmentFrequency,
 } from "../../services/api/membersApi";
+// import {
+//   getCommitmentHistory,
+//   changeCommitment,
+// } from "../../services/api/commitmentsApi";
 import {
   getCommitmentHistory,
-  changeCommitment,
+  getMemberCommitmentPeriods,
+  getMemberCommitmentSummary,
+  previewCommitmentChange,
+  confirmCommitmentChange,
+  moneyToCents,
+  centsToMoney,
+  type CommitmentPeriod,
+  type CommitmentSummary,
+  type CommitmentPreviewResponse,
+  type ChangeCommitmentRequest,
 } from "../../services/api/commitmentsApi";
+import CommitmentPreviewReview from "./CommitmentPreviewReview";
 import {
   getMemberPayments,
+  getMemberPaymentAllocations,
   type PaymentRecord,
+  type MemberPaymentAllocation,
 } from "../../services/api/paymentsApi";
 import CommitmentFormModal from "./CommitmentFormModal";
+import PeriodsYearGrid from "./PeriodsYearGrid";
+import { ApiError } from "../../services/api/api";
 type DashboardContext = {
   openPayment: (memberId?: number) => void;
 };
 const money = (value: string | number) =>
   `${Number(value).toLocaleString("en-EG", { maximumFractionDigits: 2 })} ج.م`;
-const monthKey = (value: string) => value.slice(0, 7);
-const monthDate = (key: string) => new Date(`${key}-01T00:00:00`);
-const monthLabel = (key: string) =>
-  new Intl.DateTimeFormat("ar-EG", { month: "long", year: "numeric" }).format(
-    monthDate(key),
-  );
+const frequencyLabels: Record<CommitmentFrequency, string> = {
+  MONTHLY: "شهري",
+  QUARTERLY: "ربع سنوي (كل 3 شهور)",
+  HALF_YEARLY: "نصف سنوي (كل 6 شهور)",
+  YEARLY: "سنوي",
+};
+
+
+
+
 const dateLabel = (value: string) =>
   new Intl.DateTimeFormat("ar-EG", {
     day: "numeric",
@@ -44,15 +69,7 @@ const dateLabel = (value: string) =>
     year: "numeric",
   }).format(new Date(value));
 
-type MonthRow = {
-  key: string;
-  due: number;
-  paid: number;
-  status: string;
-  isFuture: boolean;
-  hasCommitment: boolean;
-  receiptNumbers: string[];
-};
+
 
 // Load all payment pages for a member
 async function getAllMemberPayments(
@@ -91,279 +108,274 @@ export default function MemberDetailsRoute() {
   const [member, setMember] = useState<MemberRecord | null>(null);
   const [commitments, setCommitments] = useState<CommitmentRecord[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [allocations, setAllocations] = useState<
+  MemberPaymentAllocation[]
+>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [commitmentModalOpen, setCommitmentModalOpen] = useState(false);
   const [savingCommitment, setSavingCommitment] = useState(false);
+const [commitmentPreview, setCommitmentPreview] =
+  useState<CommitmentPreviewResponse | null>(null);
+const [periods, setPeriods] = useState<CommitmentPeriod[]>([]);
+const [commitmentSummary, setCommitmentSummary] =
+  useState<CommitmentSummary | null>(null);
+const [pendingCommitmentChange, setPendingCommitmentChange] =
+  useState<ChangeCommitmentRequest | null>(null);
+const [reloadKey, setReloadKey] = useState(0);
 
+// إعادة تحميل بيانات العضو تلقائيًا بعد تسجيل دفعة جديدة
+useEffect(() => {
+  const handlePaymentCreated = (event: Event) => {
+    const detail = (event as CustomEvent<{ memberId?: number }>).detail;
 
-  useEffect(() => {
-    if (!Number.isInteger(id) || id <= 0) {
-      setError("معرف العضو غير صحيح");
-      setLoading(false);
-      return;
-    }
-    let active = true;
-    setLoading(true);
-    Promise.all([
-      getMember(id),
-      getCommitmentHistory(id),
-      getAllMemberPayments(id),
-    ])
-      .then(([memberData, commitmentData, paymentData]) => {
-        if (!active) return;
-
-        setMember(memberData);
-        setCommitments(commitmentData);
-        setPayments(paymentData);
-      })
-      .catch((err: unknown) => {
-        const message =
-          err instanceof Error ? err.message : "تعذر تحميل تفاصيل العضو";
-        if (active) {
-          setError(message);
-          toast.error(message);
-        }
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [id]);
-  const now = new Date();
-
-const currentKey = `${now.getFullYear()}-${String(
-  now.getMonth() + 1,
-).padStart(2, "0")}`;
-  const monthRows = useMemo<MonthRow[]>(() => {
-    if (!member || commitments.length === 0) return [];
-
-    const now = new Date();
-
-    const currentKey = `${now.getFullYear()}-${String(
-      now.getMonth() + 1,
-    ).padStart(2, "0")}`;
-
-    const startKey = commitments.reduce(
-      (min, item) =>
-        monthKey(item.EffectiveFrom) < min
-          ? monthKey(item.EffectiveFrom)
-          : min,
-      monthKey(commitments[0].EffectiveFrom),
-    );
-
-    // Total allocated amount for each month
-    const allocations = new Map<string, number>();
-
-    // Receipt numbers for each month
-    const receipts = new Map<string, Set<string>>();
-
-    payments.forEach((payment) => {
-      (payment.Allocations ?? []).forEach((allocation) => {
-        const key = monthKey(allocation.PeriodMonth);
-
-        allocations.set(
-          key,
-          (allocations.get(key) ?? 0) +
-          Number(allocation.AllocatedAmount),
-        );
-
-        if (payment.ReceiptNumber) {
-          if (!receipts.has(key)) {
-            receipts.set(key, new Set());
-          }
-
-          receipts.get(key)!.add(payment.ReceiptNumber);
-        }
-      });
-    });
-
-    const rows: MonthRow[] = [];
-
-    let cursor = monthDate(startKey);
-
-    const end = new Date(
-      now.getFullYear(),
-      now.getMonth() + 12,
-      1,
-    );
-
-    while (cursor <= end && rows.length < 240) {
-      const key = `${cursor.getFullYear()}-${String(
-        cursor.getMonth() + 1,
-      ).padStart(2, "0")}`;
-
-      const date = `${key}-01`;
-
-      const activeCommitment = commitments
-        .filter(
-          (item) =>
-            item.EffectiveFrom.slice(0, 10) <= date &&
-            (!item.EffectiveTo ||
-              item.EffectiveTo.slice(0, 10) >= date),
-        )
-        .sort((a, b) =>
-          b.EffectiveFrom.localeCompare(a.EffectiveFrom),
-        )[0];
-
-    const hasCommitment = Boolean(activeCommitment);
-
-const due = activeCommitment
-  ? Number(activeCommitment.MonthlyAmount)
-  : 0;
-
-const paid = allocations.get(key) ?? 0;
-
-const isFuture = key > currentKey;
-
-const status = !hasCommitment
-  ? "بدون التزام"
-  : paid >= due
-    ? "مدفوع"
-    : paid > 0
-      ? "مدفوع جزئيًا"
-      : isFuture
-        ? "مستحق مستقبلًا"
-        : key < currentKey
-          ? "متأخر"
-          : "غير مدفوع";
-
-rows.push({
-  key,
-  due,
-  paid,
-  status,
-  isFuture,
-  hasCommitment,
-  receiptNumbers: Array.from(receipts.get(key) ?? []),
-});
-
-      cursor.setMonth(cursor.getMonth() + 1);
-    }
-
-    return rows;
-  }, [member, commitments, payments]);
-
-
- const monthsByYear = useMemo(() => {
-  const groups = new Map<string, MonthRow[]>();
-
-  monthRows.forEach((row) => {
-    const year = row.key.slice(0, 4);
-
-    if (!groups.has(year)) {
-      groups.set(year, []);
-    }
-
-    groups.get(year)!.push(row);
-  });
-
-  return Array.from(groups.entries())
-    .sort(([a], [b]) => b.localeCompare(a))
-    .map(([year, months]) => {
-      const monthMap = new Map(
-        months.map((month) => [month.key, month]),
-      );
-
-      const fullYearMonths = Array.from(
-        { length: 12 },
-        (_, index) => {
-          const key = `${year}-${String(index + 1).padStart(2, "0")}`;
-
-          return (
-            monthMap.get(key) ?? {
-              key,
-              due: 0,
-              paid: 0,
-              status: "بدون التزام",
-              isFuture: key > currentKey,
-              hasCommitment: false,
-              receiptNumbers: [],
-            }
-          );
-        },
-      );
-
-      return {
-        year,
-        months: fullYearMonths,
-      };
-    });
-}, [monthRows]);
-
-  const availableYears = useMemo(
-    () => monthsByYear.map(({ year }) => year),
-    [monthsByYear],
-  );
-
-  const [selectedYear, setSelectedYear] = useState(
-    String(new Date().getFullYear()),
-  );
-
-  useEffect(() => {
-    if (availableYears.length === 0) return;
-
-    if (!availableYears.includes(selectedYear)) {
-      const currentYear = String(new Date().getFullYear());
-
-      setSelectedYear(
-        availableYears.includes(currentYear)
-          ? currentYear
-          : availableYears[0],
-      );
-    }
-  }, [availableYears, selectedYear]);
-
-  const selectedYearMonths = useMemo(
-    () =>
-      monthsByYear.find(
-        (group) => group.year === selectedYear,
-      )?.months ?? [],
-    [monthsByYear, selectedYear],
-  );
-
-  const totalPaid = payments.reduce(
-    (sum, payment) => sum + Number(payment.Amount),
-    0,
-  );
-  const outstanding = monthRows
-    .filter((row) => !row.isFuture)
-    .reduce((sum, row) => sum + Math.max(0, row.due - row.paid), 0);
-
-  const currentCommitment = commitments
-    .filter((item) => item.EffectiveTo === null)
-    .sort((a, b) => b.EffectiveFrom.localeCompare(a.EffectiveFrom))[0];
-
-  const saveCommitment = async (values: {
-    MonthlyAmount: number;
-    EffectiveFrom: string;
-  }) => {
-    if (!currentCommitment) {
-      toast.error("لا يوجد التزام حالي لتعديله");
-      return;
-    }
-
-    setSavingCommitment(true);
-
-    try {
-      await changeCommitment(currentCommitment.Id, values);
-
-      const updatedHistory = await getCommitmentHistory(id);
-      setCommitments(updatedHistory);
-
-      setCommitmentModalOpen(false);
-      toast.success("تم تحديث الالتزام الشهري بنجاح");
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "تعذر تحديث الالتزام الشهري";
-
-      toast.error(message);
-    } finally {
-      setSavingCommitment(false);
+    if (!detail?.memberId || detail.memberId === id) {
+      setReloadKey((key) => key + 1);
     }
   };
+
+  window.addEventListener("amanah:payment-created", handlePaymentCreated);
+
+  return () => {
+    window.removeEventListener("amanah:payment-created", handlePaymentCreated);
+  };
+}, [id]);
+
+useEffect(() => {
+  if (!Number.isInteger(id) || id <= 0) {
+    setError("معرف العضو غير صحيح");
+    setLoading(false);
+    return;
+  }
+
+  let active = true;
+
+  const loadMemberDetails = async () => {
+    // أول تحميل فقط يعرض شاشة التحميل، وإعادة التحميل تتم بصمت
+    if (reloadKey === 0) setLoading(true);
+    setError("");
+
+    try {
+   const [
+  memberData,
+  commitmentData,
+  paymentData,
+  periodsData,
+  summaryData,
+  allocationsData,
+] = await Promise.all([
+  getMember(id),
+  getCommitmentHistory(id),
+  getAllMemberPayments(id),
+  getMemberCommitmentPeriods(id),
+  getMemberCommitmentSummary(id),
+  getMemberPaymentAllocations(id),
+]);
+
+      if (!active) return;
+
+      setMember(memberData);
+      setCommitments(commitmentData);
+      setPayments(paymentData);
+      setPeriods(periodsData);
+      setCommitmentSummary(summaryData);
+      setAllocations(allocationsData);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "تعذر تحميل تفاصيل العضو";
+
+      if (active) {
+        setError(message);
+        toast.error(message);
+      }
+    } finally {
+      if (active) setLoading(false);
+    }
+  };
+
+  loadMemberDetails();
+
+  return () => {
+    active = false;
+  };
+}, [id, reloadKey]);
+
+const totalPaidCents = payments.reduce(
+  (sum, payment) => sum + moneyToCents(payment.Amount),
+  0,
+);
+
+const totalPaid = centsToMoney(totalPaidCents);
+
+const outstanding = commitmentSummary?.totalOutstanding ?? "0.00";
+
+const totalOverdue = commitmentSummary?.totalOverdue ?? "0.00";
+
+const currentCommitment =
+  commitmentSummary?.currentCommitment ??
+  commitments
+    .filter((item) => {
+      const today = new Date();
+      const todayKey = [
+        today.getFullYear(),
+        String(today.getMonth() + 1).padStart(2, "0"),
+        String(today.getDate()).padStart(2, "0"),
+      ].join("-");
+
+      const start = item.EffectiveFrom.slice(0, 10);
+      const end = item.EffectiveTo?.slice(0, 10);
+
+      return start <= todayKey && (!end || end >= todayKey);
+    })
+    .sort((a, b) =>
+      b.EffectiveFrom.localeCompare(a.EffectiveFrom),
+    )[0] ?? null;
+
+
+  // const saveCommitment = async (values: {
+  //   MonthlyAmount: number;
+  //   EffectiveFrom: string;
+  // }) => {
+  //   if (!currentCommitment) {
+  //     toast.error("لا يوجد التزام حالي لتعديله");
+  //     return;
+  //   }
+
+  //   setSavingCommitment(true);
+
+  //   try {
+  //     await changeCommitment(currentCommitment.Id, values);
+
+  //     const updatedHistory = await getCommitmentHistory(id);
+  //     setCommitments(updatedHistory);
+
+  //     setCommitmentModalOpen(false);
+  //     toast.success("تم تحديث الالتزام الشهري بنجاح");
+  //   } catch (err: unknown) {
+  //     const message =
+  //       err instanceof Error ? err.message : "تعذر تحديث الالتزام الشهري";
+
+  //     toast.error(message);
+  //   } finally {
+  //     setSavingCommitment(false);
+  //   }
+  // };
+ 
+const closeModal = () => {
+  if (savingCommitment) return;
+
+  setCommitmentModalOpen(false);
+  setCommitmentPreview(null);
+  setPendingCommitmentChange(null);
+};
+
+const handleCommitmentPreview = async (values: {
+  AmountPerPeriod: number;
+  Frequency: CommitmentFrequency;
+  EffectiveFrom: string;
+}) => {
+  if (!currentCommitment) {
+    toast.error("لا يوجد التزام حالي لتعديله");
+    return;
+  }
+
+  setSavingCommitment(true);
+
+  try {
+    const request: ChangeCommitmentRequest = {
+      AmountPerPeriod: values.AmountPerPeriod,
+      Frequency: values.Frequency,
+      EffectiveStartDate: values.EffectiveFrom,
+    };
+
+    const preview = await previewCommitmentChange(
+      currentCommitment.Id,
+      request,
+    );
+
+    setPendingCommitmentChange(request);
+    setCommitmentPreview(preview);
+
+    toast.success("تم إعداد معاينة التغيير المالي");
+  } catch (err: unknown) {
+    toast.error(
+      err instanceof Error
+        ? err.message
+        : "تعذر معاينة تغيير الالتزام",
+    );
+  } finally {
+    setSavingCommitment(false);
+  }
+};
+
+const handleConfirmCommitment = async () => {
+  if (
+    !currentCommitment ||
+    !pendingCommitmentChange ||
+    !commitmentPreview
+  ) {
+    return;
+  }
+
+  setSavingCommitment(true);
+
+  try {
+    await confirmCommitmentChange(currentCommitment.Id, {
+      ...pendingCommitmentChange,
+      previewToken: commitmentPreview.previewToken,
+    });
+
+   const [
+  updatedHistory,
+  updatedPayments,
+  updatedPeriods,
+  updatedSummary,
+  updatedAllocations,
+] = await Promise.all([
+  getCommitmentHistory(id),
+  getAllMemberPayments(id),
+  getMemberCommitmentPeriods(id),
+  getMemberCommitmentSummary(id),
+  getMemberPaymentAllocations(id),
+]);
+
+    setCommitments(updatedHistory);
+    setPayments(updatedPayments);
+    setPeriods(updatedPeriods);
+    setCommitmentSummary(updatedSummary);
+
+    setCommitmentModalOpen(false);
+    setCommitmentPreview(null);
+    setPendingCommitmentChange(null);
+    setAllocations(updatedAllocations);
+
+    toast.success("تم تحديث الالتزام وإعادة توزيع المدفوعات بنجاح");
+  } catch (err: unknown) {
+    if (err instanceof ApiError && err.status === 409) {
+      setCommitmentPreview(null);
+      setPendingCommitmentChange(null);
+
+      toast.error(
+        "تغيرت البيانات بعد المعاينة. يرجى إجراء معاينة جديدة ومراجعتها.",
+      );
+    } else {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "تعذر تأكيد تغيير الالتزام",
+      );
+    }
+  } finally {
+    setSavingCommitment(false);
+  }
+};
+
+ 
+
+
+
   const handleReopenMember = async () => {
     try {
       await reopenMember(id);
@@ -457,10 +469,19 @@ rows.push({
               <CreditCard size={15} />
             </span>
           </div>
-          <div className="stat-label">قيمة الالتزام الشهري</div>
-          <div className="stat-value">
-            {currentCommitment ? money(currentCommitment.MonthlyAmount) : "—"}
-          </div>
+         <div className="stat-label">قيمة الالتزام لكل فترة</div>
+
+<div className="stat-value">
+  {currentCommitment
+    ? money(currentCommitment.AmountPerPeriod)
+    : "—"}
+</div>
+
+{currentCommitment && (
+  <div className="stat-label">
+    {frequencyLabels[currentCommitment.Frequency]}
+  </div>
+)}
         </div>
         <div className="stat-card">
           <div className="stat-top">
@@ -487,110 +508,7 @@ rows.push({
           <p style={{ fontSize: 15 }}>{member.Notes}</p>
         </section>
       )}
-
-      <section className="members-section annual-payments-section">
-
-        <div className="annual-year-group">
-
-          <div className="annual-year-heading">
-            <div className="annual-year-title">
-              <CalendarDays size={19} />
-              <h3>سجل المدفوعات السنوي </h3>
-
-            </div>
-
-            <select
-              className="annual-year-select"
-              value={selectedYear}
-              onChange={(e) => setSelectedYear(e.target.value)}
-            >
-              {availableYears.map((year) => (
-                <option key={year} value={year}>
-                  {year}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {selectedYearMonths.length > 0 ? (
-            <div className="annual-months-grid">
-
-              {selectedYearMonths.map((row) => {
-              const isPaid =
-  row.hasCommitment && row.paid >= row.due;
-
-const isPartial =
-  row.hasCommitment && row.paid > 0 && !isPaid;
-
-                const monthName = new Intl.DateTimeFormat(
-                  "ar-EG",
-                  { month: "long" },
-                ).format(monthDate(row.key));
-
-                return (
-                  <div
-                    key={row.key}
-                    className={`annual-month-card ${isPaid
-                        ? "month-paid"
-                        : isPartial
-                          ? "month-partial"
-                          : "month-empty"
-                      }`}
-                  >
-                    <div className="annual-month-name">
-                      {monthName}
-                    </div>
-
-                    {isPaid ? (
-                      <>
-                        <CheckCircle2
-                          size={25}
-                          className="month-status-icon"
-                        />
-                        <span className="month-status-text">
-                          تم الدفع
-                        </span>
-                        <div className="month-receipts">
-                          {row.receiptNumbers.map((receipt) => (
-                            <span key={receipt}>{receipt}</span>
-                          ))}
-                        </div>
-                      </>
-                    ) : isPartial ? (
-                      <>
-                        <CreditCard
-                          size={23}
-                          className="month-status-icon"
-                        />
-                        <span className="month-status-text">
-                          مدفوع جزئياً
-                        </span>
-                        <span className="month-paid-amount">
-                          {money(row.paid)}
-                        </span>
-                        <div className="month-receipts">
-                          {row.receiptNumbers.map((receipt) => (
-                            <span key={receipt}>{receipt}</span>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="month-empty-space" />
-                    )}
-                  </div>
-                );
-              })}
-
-            </div>
-          ) : (
-            <div className="empty-state">
-              لا توجد فترات التزام لهذه السنة.
-            </div>
-          )}
-
-        </div>
-      </section>
-
+      <PeriodsYearGrid periods={periods} allocations={allocations} />
       {/* <section className="members-section">
         <div className="list-heading">
           <div>
@@ -680,14 +598,11 @@ const isPartial =
                     <td>
                       {payment.PaymentMethod === "CASH" ? "نقداً" : "إنستاباي"}
                     </td>
-                    <td>
-                      {(payment.Allocations ?? [])
-                        .map(
-                          (allocation) =>
-                            `${monthLabel(monthKey(allocation.PeriodMonth))}`,
-                        )
-                        .join("-")}
-                    </td>
+                 <td>
+  {(payment.Allocations ?? [])
+    .map((allocation) => dateLabel(allocation.PeriodMonth))
+    .join(" - ")}
+</td>
                   </tr>
                 ))}
                 {!payments.length && (
@@ -700,66 +615,168 @@ const isPartial =
           </div>
         </div>
       </section>
-      <section className="members-section">
-        <div className="list-heading">
-          <div>
-            <h2>سجل الالتزامات</h2>
-            <p style={{ fontSize: 15 }}>{commitments.length} تغييرات مسجلة</p>
-          </div>
+<section className="members-section">
+  <div className="list-heading">
+    <div>
+      <h2>سجل الالتزامات</h2>
+      <p style={{ fontSize: 15 }}>
+        {commitments.length} تغييرات مسجلة
+      </p>
+    </div>
 
-          {currentCommitment && (
-            <button
-              type="button"
-              className="button button-primary"
-              onClick={() => setCommitmentModalOpen(true)}
-            >
-              <Pencil size={15} />
-              تعديل الالتزام
-            </button>
-          )}
-        </div>
+    {currentCommitment && (
+      <button
+        type="button"
+        className="button button-primary"
+        onClick={() => setCommitmentModalOpen(true)}
+      >
+        <Pencil size={15} />
+        تعديل الالتزام
+      </button>
+    )}
+  </div>
 
-        <div className="panel members-table-panel">
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>قيمة الالتزام الشهري</th>
-                  <th>ساري من</th>
-                  <th>ساري حتى</th>
+  <div className="panel members-table-panel">
+    <div className="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>المبلغ لكل فترة</th>
+            <th>تكرار الالتزام</th>
+            <th>ساري من</th>
+            <th>ساري حتى</th>
+            <th>الحالة</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {commitments
+            .slice()
+            .sort((a, b) =>
+              b.EffectiveFrom.localeCompare(a.EffectiveFrom)
+            )
+            .map((item) => {
+              const today = new Date();
+
+const todayKey = [
+  today.getFullYear(),
+  String(today.getMonth() + 1).padStart(2, "0"),
+  String(today.getDate()).padStart(2, "0"),
+].join("-");
+
+const start = item.EffectiveFrom.slice(0, 10);
+const end = item.EffectiveTo?.slice(0, 10);
+
+const isCurrent =
+  start <= todayKey && (!end || end >= todayKey);
+
+const isFuture = start > todayKey;
+
+              return (
+                <tr key={item.Id}>
+                  <td className="amount-cell">
+                    {money(item.AmountPerPeriod)}
+                  </td>
+
+                  <td>
+                    {frequencyLabels[item.Frequency]}
+                  </td>
+
+                  <td>
+                    {dateLabel(item.EffectiveFrom)}
+                  </td>
+
+                  <td>
+                    {item.EffectiveTo
+                      ? dateLabel(item.EffectiveTo)
+                      : "مستمر"}
+                  </td>
+
+                  <td>
+                    <span
+                      className={isCurrent
+  ? "الالتزام الحالي"
+  : isFuture
+    ? "التزام مستقبلي"
+    : "سابق"}
+                    >
+                      <i />
+                      {isCurrent ? "الالتزام الحالي" : "سابق"}
+                    </span>
+                  </td>
                 </tr>
-              </thead>
+              );
+            })}
 
-              <tbody>
-                {commitments.map((item) => (
-                  <tr key={item.Id}>
-                    <td className="amount-cell">{money(item.MonthlyAmount)}</td>
-                    <td>{dateLabel(item.EffectiveFrom)}</td>
-                    <td>
-                      {item.EffectiveTo ? dateLabel(item.EffectiveTo) : "مستمر"}
-                    </td>
-                  </tr>
-                ))}
+          {!commitments.length && (
+            <tr>
+              <td colSpan={5}>
+                لا يوجد سجل التزامات.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
 
-                {!commitments.length && (
-                  <tr>
-                    <td colSpan={3}>لا يوجد سجل التزامات.</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+
+{commitmentModalOpen && currentCommitment && (
+  !commitmentPreview ? (
+    <CommitmentFormModal
+      currentAmount={currentCommitment.AmountPerPeriod}
+      currentFrequency={currentCommitment.Frequency}
+      effectiveFrom={currentCommitment.EffectiveFrom}
+      joiningDate={member.JoiningDate}
+      saving={savingCommitment}
+      onClose={closeModal}
+      onSubmit={handleCommitmentPreview}
+    />
+  ) : (
+    <div className="modal-backdrop">
+      <section className="payment-modal member-form-modal">
+        <header className="modal-header">
+          <div>
+            <div className="eyebrow">إدارة الالتزامات</div>
+            <h2>مراجعة التغيير المالي</h2>
           </div>
-        </div>
+          <button
+            className="icon-button"
+            onClick={closeModal}
+            disabled={savingCommitment}
+          >
+            <X size={19} />
+          </button>
+        </header>
+
+    <div className="modal-body member-form-body">
+  <CommitmentPreviewReview preview={commitmentPreview} />
+</div>
+
+        <footer className="modal-footer">
+          <button
+            className="button button-secondary"
+            onClick={closeModal}
+            disabled={savingCommitment}
+          >
+            إلغاء
+          </button>
+
+          <button
+            className="button button-primary"
+            onClick={handleConfirmCommitment}
+            disabled={savingCommitment}
+          >
+            <CheckCircle2 size={16} />
+            {savingCommitment ? "جارٍ التأكيد..." : "تأكيد التغيير"}
+          </button>
+        </footer>
       </section>
-      {commitmentModalOpen && currentCommitment && (
-        <CommitmentFormModal
-          currentAmount={currentCommitment.MonthlyAmount}
-          effectiveFrom={currentCommitment.EffectiveFrom}
-          saving={savingCommitment}
-          onClose={() => setCommitmentModalOpen(false)}
-          onSubmit={saveCommitment}
-        />
-      )}
+    </div>
+  )
+)}
+
     </>
   );
 }

@@ -11,6 +11,7 @@ import {
   SlidersHorizontal,
   X,
 } from "lucide-react";
+import { moneyToCents, centsToMoney } from "../../services/api/commitmentsApi";
 import { toast } from "sonner";
 import PageTitle from "../../components/common/PageTitle";
 import { money } from "../../utils/formatters";
@@ -100,10 +101,12 @@ export default function PaymentsPage({ onAdd }: { onAdd: () => void }) {
   }, [page, limit, search, debouncedSearch]);
 
 
-  const totalAmount = payments.reduce(
-    (sum, payment) => sum + Number(payment.Amount),
-    0,
-  );
+ const totalAmountCents = payments.reduce(
+  (sum, payment) => sum + moneyToCents(payment.Amount),
+  0,
+);
+
+const totalAmount = centsToMoney(totalAmountCents);
 
   const formatDate = (date: string) =>
     new Intl.DateTimeFormat("ar-EG", {

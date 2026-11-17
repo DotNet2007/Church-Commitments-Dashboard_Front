@@ -62,7 +62,8 @@ body {
 
 button,
 input,
-select {
+select,
+option {
   font: inherit;
 }
 
@@ -982,7 +983,7 @@ td strong {
   min-width: 0;
 }
 
-.form-two input {
+.form-two input,select {
   width: 100%;
   height: 34px;
   border: 1px solid #eee8f3;
@@ -3581,4 +3582,312 @@ td {
 .members-filter-panel .search-field input {
   height: 100%;
   font-size: 12px;
+}
+
+
+
+/* Commitment Form - Select Styling */
+/* select {
+  background-color: #fcfafd;
+  border: 1px solid #c8b7dd;
+  color: #65596f;
+  border-radius: 9px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+select:focus {
+  border-color: #9b82c4;
+  box-shadow: 0 0 0 3px rgba(155, 130, 196, 0.13);
+} */
+
+/* Dark Mode */
+/* :root[data-theme="dark"] select {
+  background-color: #2b2335;
+  border-color: #40344e;
+  color: #ffffff;
+}
+
+:root[data-theme="dark"] select:focus {
+  border-color: #b99bdd;
+  box-shadow: 0 0 0 3px rgba(185, 155, 221, 0.15);
+} */
+/* سجل المدفوعات السنوي - ضيف الكود ده في ملف الـ CSS الرئيسي */
+/* إضافات صغيرة فوق ستايل annual-* الموجود عندك (ضيفها آخر ملف الـ CSS) */
+
+/* إضافات صغيرة فوق ستايل annual-* الموجود عندك (ضيفها آخر ملف الـ CSS) */
+
+/* إضافات صغيرة فوق ستايل annual-* الموجود عندك (ضيفها آخر ملف الـ CSS) */
+
+.month-status-icon { display: flex; }
+.month-note { font-size: 13px; font-weight: 700; color: var(--text-secondary); }
+
+/* متأخر */
+.month-late { background: #FEF2F2; border-color: #F5C2C2; }
+.month-late .month-status-icon,
+.month-late .month-status-text,
+.month-late .month-note { color: #C34D4D; }
+
+/* غير مدفوع */
+.month-pending { background: var(--surface-secondary); border-color: var(--border); }
+.month-pending .month-status-icon,
+.month-pending .month-status-text { color: var(--text-secondary); }
+
+/* قادم */
+.month-future { background: var(--surface); border-style: dashed; }
+.month-future .month-status-icon,
+.month-future .month-status-text { color: #557DB5; }
+
+/* الدارك مود */
+:root[data-theme="dark"] .month-paid    { background: #193C2B; border-color: #2F6B4A; }
+:root[data-theme="dark"] .month-partial { background: #49391F; border-color: #7A6030; }
+:root[data-theme="dark"] .month-late    { background: #482727; border-color: #7A3E3E; }
+:root[data-theme="dark"] .month-paid .month-status-icon,
+:root[data-theme="dark"] .month-paid .month-status-text { color: #79D6A0 !important; }
+:root[data-theme="dark"] .month-partial .month-status-icon,
+:root[data-theme="dark"] .month-partial .month-status-text,
+:root[data-theme="dark"] .month-paid-amount { color: #F3C477 !important; }
+:root[data-theme="dark"] .month-late .month-status-icon,
+:root[data-theme="dark"] .month-late .month-status-text,
+:root[data-theme="dark"] .month-late .month-note { color: #FF9999 !important; }
+:root[data-theme="dark"] .month-receipts span { background: rgba(0, 0, 0, 0.28); }
+
+/* العنوان على اليمين والسنة على أقصى الشمال */
+.annual-year-heading {
+  direction: rtl;
+  justify-content: space-between;
+}
+/* العنوان على اليمين والسنة على أقصى الشمال */
+.annual-year-heading {
+  direction: rtl;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+}
+
+.annual-year-select {
+  width: auto;
+  flex: 0 0 auto;
+  min-width: 125px;
+}
+
+@media (max-width: 640px) {
+  .annual-year-heading {
+    flex-wrap: wrap;
+  }
+
+  .annual-year-select {
+    width: 100%;
+  }
+}
+/* توزيع الالتزامات حسب الدورية - ضيفه آخر ملف الـ CSS */
+
+.commitment-rates-panel {
+  padding: 20px;
+}
+
+.commitment-rates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.commitment-rate-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.commitment-rate-card:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow);
+}
+
+.commitment-rate-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.commitment-rate-label {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.commitment-rate-count {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.commitment-rate-count strong {
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+.commitment-rate-count span {
+  font-size: 15px;
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.commitment-rate-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.commitment-rate-footer span {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.commitment-rate-footer strong {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--primary);
+  white-space: nowrap;
+}
+
+.commitment-rates-empty {
+  grid-column: 1 / -1;
+  padding: 28px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .commitment-rates-panel { padding: 14px; }
+  .commitment-rates-grid { grid-template-columns: 1fr; }
+}
+/* مراجعة تغيير الالتزام - ضيفه آخر ملف الـ CSS */
+
+.commitment-review-modal { width: min(780px, 100%); }
+
+.commitment-review { display: flex; flex-direction: column; gap: 20px; }
+
+.review-block-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  color: var(--primary);
+}
+.review-block-title h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text);
+}
+.review-count {
+  min-width: 24px;
+  padding: 1px 8px;
+  border-radius: 20px;
+  background: var(--surface-secondary);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.review-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+}
+.review-card {
+  padding: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.review-card-top { display: flex; align-items: center; gap: 8px; }
+.review-card-label { font-size: 14px; color: var(--text-secondary); font-weight: 600; }
+.review-card-value { margin-top: 10px; font-size: 21px; font-weight: 800; color: var(--text); }
+.review-up   { color: #2f8f5b; }
+.review-down { color: #c34d4d; }
+.review-neutral { color: var(--text-secondary); }
+
+.review-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+.review-table-wrap table { min-width: 560px; }
+
+.review-empty {
+  padding: 16px;
+  text-align: center;
+  color: var(--text-secondary);
+  background: var(--surface-secondary);
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  font-size: 15px;
+}
+
+.review-items { display: grid; gap: 8px; }
+.review-item {
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.review-item-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 0;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+.review-item-value { font-weight: 700; color: var(--text); }
+
+.review-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  color: #557db5;
+  background: #eaf1fc;
+  border: 1px solid #cfe0f7;
+  border-radius: 12px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.review-credit {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.review-credit-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  font-size: 15px;
+  color: var(--text-secondary);
+  border-top: 1px solid var(--border);
+}
+.review-credit-row:first-child { border-top: 0; }
+.review-credit-value { font-weight: 800; color: var(--text); }
+
+:root[data-theme="dark"] .review-up   { color: #79d6a0 !important; }
+:root[data-theme="dark"] .review-down { color: #ff9999 !important; }
+:root[data-theme="dark"] .review-notice {
+  background: #243750;
+  border-color: #35557f;
+  color: #9dc4f5;
 }

@@ -1,11 +1,5 @@
-import { useEffect,  useMemo, useRef, useState , type ReactNode } from "react";
-import {
-  Eye,
-  Search,
-  SlidersHorizontal,
-  X,
-  RefreshCw,
-} from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Eye, Search, SlidersHorizontal, X, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import PageTitle from "../../components/common/PageTitle";
 import {
@@ -82,16 +76,21 @@ const auditFieldLabels: Record<string, string> = {
   Email: "البريد الإلكتروني",
   Allocations: "توزيع الدفعة",
   IsClosed: "حالة العضوية",
-ClosedAt: "تاريخ الإغلاق",
-ClosedBy: "تم الإغلاق بواسطة",
+  ClosedAt: "تاريخ الإغلاق",
+  ClosedBy: "تم الإغلاق بواسطة",
 };
 
 const hiddenAuditFields = new Set([
-  "Id", "MemberId", "CommitmentId", "PreviousCommitmentId", "UserId",
+  "Id",
+  "MemberId",
+  "CommitmentId",
+  "PreviousCommitmentId",
+  "UserId",
 ]);
 
-
-function parseAuditValues(value: string | null): Record<string, unknown> | null {
+function parseAuditValues(
+  value: string | null,
+): Record<string, unknown> | null {
   if (!value) return null;
 
   try {
@@ -146,16 +145,12 @@ function formatAuditMonth(value: string) {
 function getAuditFieldLabel(key: string) {
   if (auditFieldLabels[key]) return auditFieldLabels[key];
 
-  // تحويل أسماء الخصائص غير المعروفة إلى صيغة مقروءة
   return key
     .replace(/([a-z])([A-Z])/g, "$1 $2")
     .replace(/([A-Z])([A-Z][a-z])/g, "$1 $2");
 }
 
-function formatAuditFieldValue(
-  key: string,
-  value: unknown,
-): ReactNode {
+function formatAuditFieldValue(key: string, value: unknown): ReactNode {
   if (value === null || value === undefined || value === "") {
     return key === "EffectiveTo" ? "مستمر" : "—";
   }
@@ -177,8 +172,8 @@ function formatAuditFieldValue(
               <div className="audit-allocation-item" key={index}>
                 <span>
                   {typeof month === "string"
-  ? formatAuditMonth(month)
-  : `الفترة ${index + 1}`}
+                    ? formatAuditMonth(month)
+                    : `الفترة ${index + 1}`}
                 </span>
 
                 <strong>
@@ -239,34 +234,27 @@ function AuditValuesComparison({
 }) {
   const oldData = parseAuditValues(oldValues);
   const newData = parseAuditValues(newValues);
-const displayValue = (key: string, data: Record<string, unknown> | null) => {
-  const value = data?.[key];
+  const displayValue = (key: string, data: Record<string, unknown> | null) => {
+    const value = data?.[key];
 
-  if (key === "ClosedBy" && value != null) {
-    if (userId != null && Number(value) === userId && username) {
-      return username;
+    if (key === "ClosedBy" && value != null) {
+      if (userId != null && Number(value) === userId && username) {
+        return username;
+      }
     }
-  }
 
-  return formatAuditFieldValue(key, value);
-};
+    return formatAuditFieldValue(key, value);
+  };
   const keys = [
-    ...new Set([
-      ...Object.keys(oldData ?? {}),
-      ...Object.keys(newData ?? {}),
-    ]),
-  ].filter(
-    (key) => !hiddenAuditFields.has(key) && key !== "Value",
-  );
+    ...new Set([...Object.keys(oldData ?? {}), ...Object.keys(newData ?? {})]),
+  ].filter((key) => !hiddenAuditFields.has(key) && key !== "Value");
 
   if (keys.length === 0) {
     const fallback = oldData?.Value ?? newData?.Value;
 
     return (
       <p className="audit-empty-values">
-        {fallback == null
-          ? "لا توجد تفاصيل إضافية مسجلة"
-          : String(fallback)}
+        {fallback == null ? "لا توجد تفاصيل إضافية مسجلة" : String(fallback)}
       </p>
     );
   }
@@ -298,7 +286,6 @@ const displayValue = (key: string, data: Record<string, unknown> | null) => {
   );
 }
 
-
 export default function AuditLogsPage() {
   const [logs, setLogs] = useState<AuditLogRecord[]>([]);
   const [meta, setMeta] = useState<PaginationMeta>(emptyMeta);
@@ -312,75 +299,63 @@ export default function AuditLogsPage() {
   const [selectedLog, setSelectedLog] = useState<AuditLogRecord | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
+  useEffect(() => {
+    let cancelled = false;
 
+    const load = async () => {
+      setLoading(true);
 
+      const query: AuditLogQuery = {
+        page,
+        limit: 10,
+        action: action || undefined,
+        entityName: entityName || undefined,
+        dateFrom: dateFrom || undefined,
+        dateTo: dateTo || undefined,
+      };
 
+      try {
+        const result = await getAuditLogs(query);
 
-
-
-
-useEffect(() => {
-  let cancelled = false;
-
-  const load = async () => {
-    setLoading(true);
-
-    const query: AuditLogQuery = {
-      page,
-      limit: 10,
-      action: action || undefined,
-      entityName: entityName || undefined,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
+        if (!cancelled) {
+          setLogs(result.data);
+          setMeta(result.meta);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          toast.error(
+            error instanceof Error ? error.message : "تعذر تحميل سجل العمليات",
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
     };
 
-    try {
-      const result = await getAuditLogs(query);
+    void load();
 
-      if (!cancelled) {
-        setLogs(result.data);
-        setMeta(result.meta);
-      }
-    } catch (error) {
-      if (!cancelled) {
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "تعذر تحميل سجل العمليات"
-        );
-      }
-    } finally {
-      if (!cancelled) {
-        setLoading(false);
-      }
-    }
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [page, action, entityName, dateFrom, dateTo]);
 
-  void load();
+  const filteredLogs = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase();
 
-  return () => {
-    cancelled = true;
-  };
-}, [page, action, entityName, dateFrom, dateTo]);
+    if (!term) return logs;
 
-
-
-
-const filteredLogs = useMemo(() => {
-  const term = search.trim().toLocaleLowerCase();
-
-  if (!term) return logs;
-
-  return logs.filter((log) =>
-    [
-      String(log.Id),
-      log.User?.Username ?? "",
-      log.Action,
-      log.EntityName,
-      String(log.EntityId),
-    ].some((value) => value.toLocaleLowerCase().includes(term)),
-  );
-}, [logs, search]);
+    return logs.filter((log) =>
+      [
+        String(log.Id),
+        log.User?.Username ?? "",
+        log.Action,
+        log.EntityName,
+        String(log.EntityId),
+      ].some((value) => value.toLocaleLowerCase().includes(term)),
+    );
+  }, [logs, search]);
 
   const openDetails = async (id: number) => {
     setDetailsLoading(true);
@@ -388,7 +363,9 @@ const filteredLogs = useMemo(() => {
       const result = await getAuditLog(id);
       setSelectedLog(result);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "تعذر تحميل تفاصيل العملية");
+      toast.error(
+        error instanceof Error ? error.message : "تعذر تحميل تفاصيل العملية",
+      );
     } finally {
       setDetailsLoading(false);
     }
@@ -410,7 +387,11 @@ const filteredLogs = useMemo(() => {
         title="سجل العمليات"
         description="مراجعة العمليات التي تمت على الأعضاء والمدفوعات والالتزامات."
         action={
-          <button className="button button-secondary" type="button" onClick={resetFilters}>
+          <button
+            className="button button-secondary"
+            type="button"
+            onClick={resetFilters}
+          >
             <RefreshCw size={15} />
             إعادة ضبط الفلاتر
           </button>
@@ -419,23 +400,34 @@ const filteredLogs = useMemo(() => {
 
       <div className="payment-summary-grid">
         <div className="summary-card">
-          <span style={{ fontSize: 15 ,fontWeight: 'bold'}} >إجمالي العمليات</span>
+          <span style={{ fontSize: 15, fontWeight: "bold" }}>
+            إجمالي العمليات
+          </span>
           <strong>{meta.total}</strong>
           <small>عدد العمليات المسجلة</small>
         </div>
         <div className="summary-card">
-          <span style={{ fontSize: 15 ,fontWeight: 'bold'  }}>العمليات المعروضة</span>
+          <span style={{ fontSize: 15, fontWeight: "bold" }}>
+            العمليات المعروضة
+          </span>
           <strong>{filteredLogs.length}</strong>
           <small>في الصفحة الحالية</small>
         </div>
         <div className="summary-card">
-          <span style={{ fontSize: 15 ,fontWeight: 'bold'  }}>الصفحة الحالية</span>
-          <strong>{meta.totalPages ? `${meta.page} / ${meta.totalPages}` : "—"}</strong>
+          <span style={{ fontSize: 15, fontWeight: "bold" }}>
+            الصفحة الحالية
+          </span>
+          <strong>
+            {meta.totalPages ? `${meta.page} / ${meta.totalPages}` : "—"}
+          </strong>
           <small>ترقيم صفحات السجل</small>
         </div>
       </div>
 
-      <section className="audit-filter-panel" aria-label="البحث وتصفية سجل العمليات">
+      <section
+        className="audit-filter-panel"
+        aria-label="البحث وتصفية سجل العمليات"
+      >
         <div className="audit-search-row">
           <label htmlFor="audit-search">البحث في سجل العمليات</label>
           <div className="audit-search-input">
@@ -443,18 +435,24 @@ const filteredLogs = useMemo(() => {
             <input
               id="audit-search"
               value={search}
-             onChange={(event) => {
-  setSearch(event.target.value);
-}}
+              onChange={(event) => {
+                setSearch(event.target.value);
+              }}
               placeholder="ابحث برقم العملية أو اسم المستخدم أو رقم العنصر"
             />
             {search && (
-              <button type="button" onClick={() => setSearch("")} aria-label="مسح البحث">
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                aria-label="مسح البحث"
+              >
                 <X size={16} />
               </button>
             )}
           </div>
-          <p style={{ fontSize: 15}}>البحث يراجع النتائج الظاهرة في الصفحة الحالية.</p>
+          <p style={{ fontSize: 15 }}>
+            البحث يراجع النتائج الظاهرة في الصفحة الحالية.
+          </p>
         </div>
 
         <div className="audit-filters-heading">
@@ -462,13 +460,21 @@ const filteredLogs = useMemo(() => {
             <SlidersHorizontal size={17} />
             <strong>تصفية النتائج</strong>
           </div>
-          <button type="button" onClick={resetFilters}>مسح كل الفلاتر</button>
+          <button type="button" onClick={resetFilters}>
+            مسح كل الفلاتر
+          </button>
         </div>
 
         <div className="audit-filters-grid">
           <label className="audit-filter-field">
             <span>نوع العملية</span>
-            <select value={action} onChange={(event) => { setAction(event.target.value); setPage(1); }}>
+            <select
+              value={action}
+              onChange={(event) => {
+                setAction(event.target.value);
+                setPage(1);
+              }}
+            >
               <option value="">كل العمليات</option>
               <option value="CREATE">إضافة</option>
               <option value="UPDATE">تعديل</option>
@@ -482,7 +488,13 @@ const filteredLogs = useMemo(() => {
 
           <label className="audit-filter-field">
             <span>نوع العنصر</span>
-            <select value={entityName} onChange={(event) => { setEntityName(event.target.value); setPage(1); }}>
+            <select
+              value={entityName}
+              onChange={(event) => {
+                setEntityName(event.target.value);
+                setPage(1);
+              }}
+            >
               <option value="">كل العناصر</option>
               <option value="Member">عضو</option>
               <option value="Payment">دفعة</option>
@@ -493,12 +505,27 @@ const filteredLogs = useMemo(() => {
 
           <label className="audit-filter-field">
             <span>من تاريخ</span>
-            <input type="date" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setPage(1); }} />
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(event) => {
+                setDateFrom(event.target.value);
+                setPage(1);
+              }}
+            />
           </label>
 
           <label className="audit-filter-field">
             <span>إلى تاريخ</span>
-            <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => { setDateTo(event.target.value); setPage(1); }} />
+            <input
+              type="date"
+              value={dateTo}
+              min={dateFrom || undefined}
+              onChange={(event) => {
+                setDateTo(event.target.value);
+                setPage(1);
+              }}
+            />
           </label>
         </div>
       </section>
@@ -507,7 +534,9 @@ const filteredLogs = useMemo(() => {
         <div className="list-heading">
           <div>
             <h2>سجل نشاط النظام</h2>
-            <p style={{ fontSize: 15 }}>كل عملية مسجلة مع المستخدم والتوقيت والعنصر المتأثر</p>
+            <p style={{ fontSize: 15 }}>
+              كل عملية مسجلة مع المستخدم والتوقيت والعنصر المتأثر
+            </p>
           </div>
         </div>
         <div className="panel members-table-panel">
@@ -525,101 +554,159 @@ const filteredLogs = useMemo(() => {
                 </tr>
               </thead>
               <tbody>
-  {loading && logs.length === 0 ? (
-    <tr>
-      <td colSpan={7} className="text-center">
-        جارٍ تحميل سجل العمليات...
-      </td>
-    </tr>
-  ) : filteredLogs.length === 0 ? (
-    <tr>
-      <td colSpan={7} className="text-center">
-        لا توجد عمليات مطابقة للفلاتر
-      </td>
-    </tr>
-  ) : (
-    filteredLogs.map((log) => (
-      <tr key={log.Id}>
-        <td className="id-cell">#{log.Id}</td>
-        <td>
-          <strong>
-            {log.User?.Username ?? `مستخدم #${log.UserId}`}
-          </strong>
-        </td>
-        <td>
-          <span className="filter-chip selected">
-            {actionLabels[log.Action] ?? log.Action}
-          </span>
-        </td>
-        <td>{entityLabels[log.EntityName] ?? log.EntityName}</td>
-        <td>{log.EntityId}</td>
-        <td>{formatDate(log.CreatedAt)}</td>
-        <td>
-          <button
-            type="button"
-            className="row-action"
-            title="عرض التفاصيل"
-            onClick={() => void openDetails(log.Id)}
-            disabled={detailsLoading}
-          >
-            <Eye size={20} />
-          </button>
-        </td>
-      </tr>
-    ))
-  )}
-</tbody>
+                {loading && logs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center">
+                      جارٍ تحميل سجل العمليات...
+                    </td>
+                  </tr>
+                ) : filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="text-center">
+                      لا توجد عمليات مطابقة للفلاتر
+                    </td>
+                  </tr>
+                ) : (
+                  filteredLogs.map((log) => (
+                    <tr key={log.Id}>
+                      <td className="id-cell">#{log.Id}</td>
+                      <td>
+                        <strong>
+                          {log.User?.Username ?? `مستخدم #${log.UserId}`}
+                        </strong>
+                      </td>
+                      <td>
+                        <span className="filter-chip selected">
+                          {actionLabels[log.Action] ?? log.Action}
+                        </span>
+                      </td>
+                      <td>{entityLabels[log.EntityName] ?? log.EntityName}</td>
+                      <td>{log.EntityId}</td>
+                      <td>{formatDate(log.CreatedAt)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="row-action"
+                          title="عرض التفاصيل"
+                          onClick={() => void openDetails(log.Id)}
+                          disabled={detailsLoading}
+                        >
+                          <Eye size={20} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
             </table>
           </div>
           <div className="pagination-controls">
-     <button
-  type="button"
-  className="button button-secondary"
-  disabled={!meta.hasPreviousPage || loading}
-  onClick={() => setPage((current) => current - 1)}
->
-  السابق
-</button>
-            <span>صفحة {meta.page} من {meta.totalPages || 1}</span>
-   <button
-  type="button"
-  className="button button-secondary"
-  disabled={!meta.hasNextPage || loading}
-  onClick={() => setPage((current) => current + 1)}
->
-  التالي
-</button>
+            <button
+              type="button"
+              className="button button-secondary"
+              disabled={!meta.hasPreviousPage || loading}
+              onClick={() => setPage((current) => current - 1)}
+            >
+              السابق
+            </button>
+            <span>
+              صفحة {meta.page} من {meta.totalPages || 1}
+            </span>
+            <button
+              type="button"
+              className="button button-secondary"
+              disabled={!meta.hasNextPage || loading}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              التالي
+            </button>
           </div>
         </div>
       </section>
 
       {selectedLog && (
-        <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedLog(null); }}>
+        <div
+          className="modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setSelectedLog(null);
+          }}
+        >
           <section className="payment-modal" role="dialog" aria-modal="true">
             <header className="modal-header">
               <div>
                 <div className="eyebrow">تفاصيل سجل العمليات</div>
                 <h2>العملية رقم #{selectedLog.Id}</h2>
               </div>
-              <button type="button" className="icon-button" onClick={() => setSelectedLog(null)} aria-label="إغلاق"><X size={19} /></button>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setSelectedLog(null)}
+                aria-label="إغلاق"
+              >
+                <X size={19} />
+              </button>
             </header>
             <div className="modal-body">
               <div className="allocation-box">
-                <div style={{ fontSize: 15 ,fontWeight: 'bold' }} className="allocation-row"><span>المستخدم</span><b>{selectedLog.User?.Username ?? `مستخدم #${selectedLog.UserId}`}</b></div>
-                <div style={{ fontSize: 15 ,fontWeight: 'bold' }}  className="allocation-row"><span>نوع العملية</span><b>{actionLabels[selectedLog.Action] ?? selectedLog.Action}</b></div>
-                <div style={{ fontSize: 15 ,fontWeight: 'bold' }}  className="allocation-row"><span>العنصر</span><b>{entityLabels[selectedLog.EntityName] ?? selectedLog.EntityName} #{selectedLog.EntityId}</b></div>
-                <div style={{ fontSize: 15 ,fontWeight: 'bold' }}  className="allocation-row"><span>التاريخ والوقت</span><b>{formatDate(selectedLog.CreatedAt)}</b></div>
-                <div style={{ fontSize: 15 ,fontWeight: 'bold' }}  className="section-label">مقارنة التغييرات</div>
-                <AuditValuesComparison 
+                <div
+                  style={{ fontSize: 15, fontWeight: "bold" }}
+                  className="allocation-row"
+                >
+                  <span>المستخدم</span>
+                  <b>
+                    {selectedLog.User?.Username ??
+                      `مستخدم #${selectedLog.UserId}`}
+                  </b>
+                </div>
+                <div
+                  style={{ fontSize: 15, fontWeight: "bold" }}
+                  className="allocation-row"
+                >
+                  <span>نوع العملية</span>
+                  <b>
+                    {actionLabels[selectedLog.Action] ?? selectedLog.Action}
+                  </b>
+                </div>
+                <div
+                  style={{ fontSize: 15, fontWeight: "bold" }}
+                  className="allocation-row"
+                >
+                  <span>العنصر</span>
+                  <b>
+                    {entityLabels[selectedLog.EntityName] ??
+                      selectedLog.EntityName}{" "}
+                    #{selectedLog.EntityId}
+                  </b>
+                </div>
+                <div
+                  style={{ fontSize: 15, fontWeight: "bold" }}
+                  className="allocation-row"
+                >
+                  <span>التاريخ والوقت</span>
+                  <b>{formatDate(selectedLog.CreatedAt)}</b>
+                </div>
+                <div
+                  style={{ fontSize: 15, fontWeight: "bold" }}
+                  className="section-label"
+                >
+                  مقارنة التغييرات
+                </div>
+                <AuditValuesComparison
                   oldValues={selectedLog.OldValues}
                   newValues={selectedLog.NewValues}
-                   username={selectedLog.User?.Username}
-  userId={selectedLog.User?.Id}
+                  username={selectedLog.User?.Username}
+                  userId={selectedLog.User?.Id}
                 />
               </div>
             </div>
             <footer className="modal-footer">
-              <button type="button" className="button button-secondary" onClick={() => setSelectedLog(null)}>إغلاق</button>
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() => setSelectedLog(null)}
+              >
+                إغلاق
+              </button>
             </footer>
           </section>
         </div>

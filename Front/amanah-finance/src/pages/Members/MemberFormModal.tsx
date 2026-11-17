@@ -1,14 +1,18 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, X } from "lucide-react";
-import type { MemberRecord } from "../../services/api/membersApi";
-
+import type {
+  MemberRecord,
+  CommitmentFrequency,
+} from "../../services/api/membersApi";
+import { toast } from "sonner";
 export interface MemberFormValues {
   FullName: string;
   Phone: string;
   JoiningDate: string;
   Notes: string;
-  MonthlyAmount: string;
-  CommitmentStartMonth: string;
+  AmountPerPeriod: string;
+  Frequency: CommitmentFrequency;
+  EffectiveFrom: string;
 }
 
 type Props = {
@@ -19,11 +23,14 @@ type Props = {
 };
 
 const today = new Date();
+
 const dateValue = (value?: string) => (value ? value.slice(0, 10) : "");
-const monthStart = (value?: string) => {
-  if (value) return `${value.slice(0, 7)}-01`;
-  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-01`;
-};
+
+const todayValue = [
+  today.getFullYear(),
+  String(today.getMonth() + 1).padStart(2, "0"),
+  String(today.getDate()).padStart(2, "0"),
+].join("-");
 
 export default function MemberFormModal({
   member,
@@ -34,33 +41,70 @@ export default function MemberFormModal({
   const [values, setValues] = useState<MemberFormValues>({
     FullName: "",
     Phone: "",
-    JoiningDate: dateValue(new Date().toISOString()),
+    JoiningDate: todayValue,
     Notes: "",
-    MonthlyAmount: "",
-    CommitmentStartMonth: monthStart(),
+    AmountPerPeriod: "",
+    Frequency: "MONTHLY",
+    EffectiveFrom: todayValue,
   });
 
   useEffect(() => {
-    if (!member) return;
+    if (!member) {
+      setValues({
+        FullName: "",
+        Phone: "",
+        JoiningDate: todayValue,
+        Notes: "",
+        AmountPerPeriod: "",
+        Frequency: "MONTHLY",
+        EffectiveFrom: todayValue,
+      });
+      return;
+    }
+
     const latest = [...(member.Commitments ?? [])].sort(
       (a, b) =>
         new Date(b.EffectiveFrom).getTime() -
         new Date(a.EffectiveFrom).getTime(),
     )[0];
+
     setValues({
       FullName: member.FullName,
       Phone: member.Phone ?? "",
       JoiningDate: dateValue(member.JoiningDate),
       Notes: member.Notes ?? "",
-      MonthlyAmount: latest ? String(latest.MonthlyAmount) : "",
-      CommitmentStartMonth: monthStart(latest?.EffectiveFrom),
+      AmountPerPeriod: latest ? String(latest.AmountPerPeriod) : "",
+      Frequency: latest?.Frequency ?? "MONTHLY",
+      EffectiveFrom: latest ? dateValue(latest.EffectiveFrom) : todayValue,
     });
   }, [member]);
 
-  const set = (key: keyof MemberFormValues, value: string) =>
-    setValues((old) => ({ ...old, [key]: value }));
-  const submit = (event: FormEvent) => {
+  const set = (key: keyof MemberFormValues, value: string) => {
+    setValues((old) => ({
+      ...old,
+      [key]: value,
+    }));
+  };
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (!member) {
+      const amountText = values.AmountPerPeriod.trim();
+
+      if (!/^\d+(\.\d{1,2})?$/.test(amountText)) {
+        toast.error("أدخل مبلغًا صحيحًا بحد أقصى منزلتين عشريتين");
+        return;
+      }
+
+      const [whole, decimal = ""] = amountText.split(".");
+      const cents = Number(whole) * 100 + Number(decimal.padEnd(2, "0"));
+
+      if (!Number.isSafeInteger(cents) || cents <= 0) {
+        toast.error("قيمة الالتزام غير صحيحة");
+        return;
+      }
+    }
     onSubmit(values);
   };
 
@@ -68,7 +112,9 @@ export default function MemberFormModal({
     <div
       className="modal-backdrop"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget && !saving) onClose();
+        if (e.target === e.currentTarget && !saving) {
+          onClose();
+        }
       }}
     >
       <section
@@ -84,6 +130,7 @@ export default function MemberFormModal({
               {member ? "تعديل بيانات العضو" : "إضافة عضو جديد"}
             </h2>
           </div>
+
           <button
             type="button"
             className="icon-button"
@@ -94,6 +141,7 @@ export default function MemberFormModal({
             <X size={19} />
           </button>
         </header>
+
         <form onSubmit={submit}>
           <div className="modal-body member-form-body">
             <div className="member-form-grid">
@@ -108,6 +156,7 @@ export default function MemberFormModal({
                   placeholder="الاسم بالكامل"
                 />
               </label>
+
               <label>
                 <span className="field-label">رقم الهاتف</span>
                 <input
@@ -117,6 +166,7 @@ export default function MemberFormModal({
                   placeholder="رقم الهاتف"
                 />
               </label>
+
               <label>
                 <span className="field-label">تاريخ الانضمام *</span>
                 <input
@@ -126,35 +176,54 @@ export default function MemberFormModal({
                   onChange={(e) => set("JoiningDate", e.target.value)}
                 />
               </label>
+
               {!member && (
-                <label>
-                  <span className="field-label">قيمة الالتزام الشهري *</span>
-                  <input
-                    required
-                    type="number"
-                    min="0.01"
-                    max="10000000000000000"
-                    step="0.01"
-                    value={values.MonthlyAmount}
-                    onChange={(e) => set("MonthlyAmount", e.target.value)}
-                    placeholder="500"
-                  />
-                </label>
-              )}
-              {!member && (
-                <label>
-                  <span className="field-label">بداية الالتزام *</span>
-                  <input
-                    required
-                    type="month"
-                    value={values.CommitmentStartMonth.slice(0, 7)}
-                    onChange={(e) =>
-                      set("CommitmentStartMonth", `${e.target.value}-01`)
-                    }
-                  />
-                </label>
+                <>
+                  <label>
+                    <span className="field-label">
+                      قيمة الالتزام لكل فترة *
+                    </span>
+                    <input
+                      required
+                      type="number"
+                      min="0.01"
+                      max="10000000000000000"
+                      step="0.01"
+                      value={values.AmountPerPeriod}
+                      onChange={(e) => set("AmountPerPeriod", e.target.value)}
+                      placeholder="500"
+                    />
+                  </label>
+
+                  <label>
+                    <span className="field-label">دورية الالتزام *</span>
+                    <select
+                      required
+                      value={values.Frequency}
+                      onChange={(e) =>
+                        set("Frequency", e.target.value as CommitmentFrequency)
+                      }
+                    >
+                      <option value="MONTHLY">شهري</option>
+                      <option value="QUARTERLY">ربع سنوي</option>
+                      <option value="HALF_YEARLY">نصف سنوي</option>
+                      <option value="YEARLY">سنوي</option>
+                    </select>
+                  </label>
+
+                  <label>
+                    <span className="field-label">بداية الالتزام *</span>
+                    <input
+                      required
+                      type="date"
+                      value={values.EffectiveFrom}
+                      onChange={(e) => set("EffectiveFrom", e.target.value)}
+                    />
+                  </label>
+                </>
               )}
             </div>
+
             <label className="member-notes-field">
               <span className="field-label">ملاحظات</span>
               <textarea
@@ -165,12 +234,14 @@ export default function MemberFormModal({
                 placeholder="ملاحظات اختيارية..."
               />
             </label>
+
             {member && (
-              <p style={{ fontSize: 15 }}className="member-form-hint">
-                تعديل بيانات العضو لا يغيّر الالتزام الشهري أو سجل الالتزامات.
+              <p style={{ fontSize: 15 }} className="member-form-hint">
+                تعديل بيانات العضو لا يغيّر الالتزام أو سجل الالتزامات.
               </p>
             )}
           </div>
+
           <footer className="modal-footer">
             <button
               type="button"
@@ -180,6 +251,7 @@ export default function MemberFormModal({
             >
               إلغاء
             </button>
+
             <button
               type="submit"
               className="button button-primary"
