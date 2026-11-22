@@ -16,23 +16,18 @@ export default function AddMemberPage() {
   const navigate = useNavigate();
 
   const today = new Date();
-
-  const todayValue = [
-    today.getFullYear(),
-    String(today.getMonth() + 1).padStart(2, "0"),
-    String(today.getDate()).padStart(2, "0"),
-  ].join("-");
-
-  const [values, setValues] = useState({
-    FullName: "",
-    Phone: "",
-    JoiningDate: todayValue,
-    Notes: "",
-    AmountPerPeriod: "",
-    Frequency: "MONTHLY" as CommitmentFrequency,
-    EffectiveFrom: todayValue,
-  });
-
+const pad = (n: number) => String(n).padStart(2, "0");
+const todayValue = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+const firstOfMonthValue = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`;
+const [values, setValues] = useState({
+  FullName: "",
+  Phone: "",
+  JoiningDate: todayValue,
+  Notes: "",
+  AmountPerPeriod: "",
+  Frequency: "MONTHLY" as CommitmentFrequency,
+  EffectiveFrom: firstOfMonthValue, // بدل todayValue
+});
   const [saving, setSaving] = useState(false);
 
   const set = (
@@ -63,29 +58,26 @@ if (!Number.isSafeInteger(amountInCents) || amountInCents <= 0) {
   toast.error("قيمة الالتزام غير صحيحة");
   return;
 }
-
+const effectiveFrom = `${values.EffectiveFrom.slice(0, 7)}-01`;
 const amount = amountInCents / 100;
 
-  if (
-  !values.EffectiveFrom ||
-  Number.isNaN(Date.parse(`${values.EffectiveFrom}T00:00:00`))
-) {
+ if (Number.isNaN(Date.parse(`${effectiveFrom}T00:00:00`))) {
   toast.error("يرجى تحديد تاريخ بداية التزام صحيح");
   return;
 }
 
     setSaving(true);
-
+// console.log("EffectiveFrom:", effectiveFrom);
     try {
-      await createMember({
-        FullName: values.FullName.trim(),
-        Phone: values.Phone.trim() || undefined,
-        JoiningDate: values.JoiningDate,
-        Notes: values.Notes.trim() || undefined,
-        AmountPerPeriod: amount,
-        Frequency: values.Frequency,
-        EffectiveFrom: values.EffectiveFrom,
-      });
+    await createMember({
+  FullName: values.FullName.trim(),
+  Phone: values.Phone.trim() || undefined,
+  JoiningDate: values.JoiningDate,
+  Notes: values.Notes.trim() || undefined,
+  AmountPerPeriod: amount,
+  Frequency: values.Frequency,
+  EffectiveFrom: effectiveFrom,
+});
 
       toast.success("تم إضافة العضو والالتزام الأول بنجاح");
 

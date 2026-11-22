@@ -118,16 +118,33 @@ export default function MembersPage({
                     String(today.getDate()).padStart(2, "0"),
                   ].join("-");
 
-                  const current = commitments
-                    .filter((item) => {
-                      const start = item.EffectiveFrom.slice(0, 10);
-                      const end = item.EffectiveTo?.slice(0, 10);
+                  // const current = commitments
+                  //   .filter((item) => {
+                  //     const start = item.EffectiveFrom.slice(0, 10);
+                  //     const end = item.EffectiveTo?.slice(0, 10);
 
-                      return start <= todayKey && (!end || end >= todayKey);
-                    })
-                    .sort((a, b) =>
-                      b.EffectiveFrom.localeCompare(a.EffectiveFrom),
-                    )[0];
+                  //     return start <= todayKey && (!end || end >= todayKey);
+                  //   })
+                  //   .sort((a, b) =>
+                  //     b.EffectiveFrom.localeCompare(a.EffectiveFrom),
+                  //   )[0];
+const sorted = [...commitments].sort((a, b) =>
+  b.EffectiveFrom.localeCompare(a.EffectiveFrom),
+);
+
+const activeNow = sorted.find((item) => {
+  const start = item.EffectiveFrom.slice(0, 10);
+  const end = item.EffectiveTo?.slice(0, 10);
+  return start <= todayKey && (!end || end >= todayKey);
+});
+
+// أقرب التزام مستقبلي (أصغر تاريخ بداية أكبر من النهارده)
+const upcoming = [...sorted]
+  .reverse()
+  .find((item) => item.EffectiveFrom.slice(0, 10) > todayKey);
+
+const current = activeNow ?? upcoming ?? sorted[0];
+const isUpcoming = !activeNow && !!upcoming && current === upcoming;
                   return (
                     <tr
                       key={member.Id}
@@ -158,7 +175,7 @@ export default function MembersPage({
                       </td>
                       <td>{member.Phone || "—"}</td>
                       <td>{date(member.JoiningDate)}</td>
-                      <td className="amount-cell">
+                      {/* <td className="amount-cell">
                         {current ? (
                           <>
                             <strong>{money(current.AmountPerPeriod)}</strong>
@@ -173,7 +190,23 @@ export default function MembersPage({
                         ) : (
                           "—"
                         )}
-                      </td>
+                      </td> */}
+                      <td className="amount-cell">
+  {current ? (
+    <>
+      <strong>{money(current.AmountPerPeriod)}</strong>
+      <div className="text-muted">
+        {current.Frequency === "MONTHLY" && "شهري"}
+        {current.Frequency === "QUARTERLY" && "ربع سنوي"}
+        {current.Frequency === "HALF_YEARLY" && "نصف سنوي"}
+        {current.Frequency === "YEARLY" && "سنوي"}
+        {/* {isUpcoming && ` • يبدأ ${date(current.EffectiveFrom)}`} */}
+      </div>
+    </>
+  ) : (
+    "—"
+  )}
+</td>
                       <td>
                         <span
                           className={`status ${member.IsClosed ? "status-late" : "status-paid"}`}
