@@ -3,6 +3,11 @@ import { apiRequest } from "./api";
 export interface AuthUser {
   id: number;
   username: string;
+  organization?: {
+    id: number;
+    code: string;
+    name: string;
+  } | null;
 }
 
 export interface LoginResponse {

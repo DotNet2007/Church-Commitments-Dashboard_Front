@@ -27,6 +27,8 @@ export function clearStoredToken(): void {
 
 type RequestOptions = Omit<RequestInit, "headers"> & {
   headers?: HeadersInit;
+  /** Override the API origin for modules mounted on a different backend base path. */
+  baseUrl?: string;
   auth?: boolean;
   redirectOnUnauthorized?: boolean;
 };
@@ -77,6 +79,7 @@ export async function apiRequest<T>(
 
   const {
     auth,
+    baseUrl = API_BASE_URL,
     redirectOnUnauthorized = true,
     ...fetchOptions
   } = options;
@@ -98,7 +101,7 @@ export async function apiRequest<T>(
   let response: Response;
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    response = await fetch(`${baseUrl}${path}`, {
       ...fetchOptions,
       headers,
     });

@@ -13,6 +13,9 @@ const MemberDetailsRoute = lazy(
   () => import("../pages/Members/MemberDetailsRoute"),
 );
 const PaymentsRoute = lazy(() => import("../pages/Payments/PaymentsRoute"));
+const AccountsRoute = lazy(() => import("../pages/Accounts/AccountsRoute"));
+const ExpensesRoute = lazy(() => import("../pages/Transactions/ExpensesRoute"));
+const RevenuesRoute = lazy(() => import("../pages/Transactions/RevenuesRoute"));
 // const ReportsPage = lazy(() => import("../pages/Reports/ReportsPage"));
 const AuditLogsPage = lazy(() => import("../pages/AuditLogs/AuditLogsPage"));
 const AddMemberPage = lazy(() => import("../pages/AddMember/AddMemberPage"));
@@ -79,6 +82,30 @@ export const router = createBrowserRouter([
             element: (
               <LazyPage>
                 <MemberDetailsRoute />
+              </LazyPage>
+            ),
+          },
+          {
+            path: "accounts",
+            element: (
+              <LazyPage>
+                <AccountsRoute />
+              </LazyPage>
+            ),
+          },
+          {
+            path: "expenses",
+            element: (
+              <LazyPage>
+                <ExpensesRoute />
+              </LazyPage>
+            ),
+          },
+          {
+            path: "revenues",
+            element: (
+              <LazyPage>
+                <RevenuesRoute />
               </LazyPage>
             ),
           },

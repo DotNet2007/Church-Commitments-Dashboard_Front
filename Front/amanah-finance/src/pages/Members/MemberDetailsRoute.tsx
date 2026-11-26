@@ -124,9 +124,9 @@ const [pendingCommitmentChange, setPendingCommitmentChange] =
   useState<ChangeCommitmentRequest | null>(null);
 const [reloadKey, setReloadKey] = useState(0);
 
-// إعادة تحميل بيانات العضو تلقائيًا بعد تسجيل دفعة جديدة
+// Reload member financial data after a payment is created, edited, or deleted.
 useEffect(() => {
-  const handlePaymentCreated = (event: Event) => {
+  const handlePaymentChanged = (event: Event) => {
     const detail = (event as CustomEvent<{ memberId?: number }>).detail;
 
     if (!detail?.memberId || detail.memberId === id) {
@@ -134,10 +134,20 @@ useEffect(() => {
     }
   };
 
-  window.addEventListener("amanah:payment-created", handlePaymentCreated);
+  const events = [
+    "amanah:payment-created",
+    "amanah:payment-updated",
+    "amanah:payment-deleted",
+  ];
+
+  events.forEach((eventName) =>
+    window.addEventListener(eventName, handlePaymentChanged),
+  );
 
   return () => {
-    window.removeEventListener("amanah:payment-created", handlePaymentCreated);
+    events.forEach((eventName) =>
+      window.removeEventListener(eventName, handlePaymentChanged),
+    );
   };
 }, [id]);
 

@@ -9,6 +9,8 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  Trash2,
+  Save,
   X,
 } from "lucide-react";
 import { moneyToCents, centsToMoney } from "../../services/api/commitmentsApi";
@@ -18,7 +20,8 @@ import { money } from "../../utils/formatters";
 import {
   getPayments,
   getPaymentById,
-  updatePaymentReceipt,
+  updatePayment,
+  deletePayment,
   type PaymentRecord,
   type PaginationMeta,
 } from "../../services/api/paymentsApi";
@@ -41,10 +44,13 @@ export default function PaymentsPage({ onAdd }: { onAdd: () => void }) {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [selectedPayment, setSelectedPayment] =
     useState<PaymentRecord | null>(null);
-  const [receiptPayment, setReceiptPayment] =
-    useState<PaymentRecord | null>(null);
-  const [receiptNumber, setReceiptNumber] = useState("");
-  const [savingReceipt, setSavingReceipt] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<PaymentRecord | null>(null);
+  const [editReceiptNumber, setEditReceiptNumber] = useState("");
+  const [editPaymentMethod, setEditPaymentMethod] = useState("CASH");
+  const [editAmount, setEditAmount] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deletingPaymentId, setDeletingPaymentId] = useState<number | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -98,7 +104,7 @@ export default function PaymentsPage({ onAdd }: { onAdd: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [page, limit, search, debouncedSearch]);
+  }, [page, limit, search, debouncedSearch, refreshKey]);
 
 
  const totalAmountCents = payments.reduce(
@@ -145,62 +151,88 @@ const totalAmount = centsToMoney(totalAmountCents);
     }
   };
 
-  const openReceiptEditor = (payment: PaymentRecord) => {
-    setReceiptPayment(payment);
-    setReceiptNumber(payment.ReceiptNumber);
+  const openPaymentEditor = (payment: PaymentRecord) => {
+    setEditingPayment(payment);
+    setEditReceiptNumber(payment.ReceiptNumber ?? "");
+    setEditPaymentMethod(payment.PaymentMethod);
+    setEditAmount(String(payment.Amount));
   };
 
-  const saveReceiptNumber = async () => {
-    if (!receiptPayment) return;
+  const savePaymentChanges = async () => {
+    if (!editingPayment) return;
 
-    const value = receiptNumber.trim();
+    const amount = Number(editAmount);
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      !/^\\d+(\\.\\d{1,2})?$/.test(editAmount.trim())
+    ) {
+      toast.error("يرجى إدخال مبلغ أكبر من صفر وبحد أقصى منزلتين عشريتين");
+      return;
+    }
 
-    if (!value) {
+    const body: { ReceiptNumber?: string; PaymentMethod?: string; Amount?: number } = {};
+    const nextReceipt = editReceiptNumber.trim();
+    if (!nextReceipt) {
       toast.error("يرجى إدخال رقم الإيصال");
       return;
     }
+    if (nextReceipt !== editingPayment.ReceiptNumber) body.ReceiptNumber = nextReceipt;
+    if (editPaymentMethod !== editingPayment.PaymentMethod) body.PaymentMethod = editPaymentMethod;
+    if (amount !== Number(editingPayment.Amount)) body.Amount = amount;
 
-    if (value === receiptPayment.ReceiptNumber) {
-      setReceiptPayment(null);
+    if (Object.keys(body).length === 0) {
+      setEditingPayment(null);
       return;
     }
 
-    setSavingReceipt(true);
-
+    setSavingEdit(true);
     try {
-      const updatedPayment = await updatePaymentReceipt(
-        receiptPayment.Id,
-        value,
+      const updated = await updatePayment(editingPayment.Id, body);
+      setPayments((current) => current.map((payment) =>
+        payment.Id === updated.Id
+          ? { ...payment, ...updated, Member: updated.Member ?? payment.Member,
+              Allocations: updated.Allocations ?? payment.Allocations }
+          : payment
+      ));
+      setSelectedPayment((current) => current?.Id === updated.Id
+        ? { ...current, ...updated, Member: updated.Member ?? current.Member,
+            Allocations: updated.Allocations ?? current.Allocations }
+        : current
       );
-
-      setPayments((current) =>
-        current.map((payment) =>
-          payment.Id === updatedPayment.Id
-            ? {
-              ...payment,
-              ...updatedPayment,
-
-              // Preserve member information if PATCH doesn't return it
-              Member: updatedPayment.Member ?? payment.Member,
-
-              // Preserve allocations if PATCH doesn't return them
-              Allocations:
-                updatedPayment.Allocations ?? payment.Allocations,
-            }
-            : payment,
-        ),
-      );
-
-      setReceiptPayment(null);
-      toast.success("تم تحديث رقم الإيصال بنجاح");
+      setEditingPayment(null);
+      setRefreshKey((key) => key + 1);
+      window.dispatchEvent(new CustomEvent("amanah:payment-updated", {
+        detail: { memberId: updated.MemberId },
+      }));
+      toast.success("تم تحديث الدفعة وإعادة تحميل التوزيعات بنجاح");
     } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "تعذر تحديث رقم الإيصال",
-      );
+      toast.error(error instanceof Error ? error.message : "تعذر تحديث الدفعة");
     } finally {
-      setSavingReceipt(false);
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeletePayment = async (payment: PaymentRecord) => {
+  const confirmed = window.confirm(
+  `هل أنت متأكد من حذف العضو "${payment.Member?.FullName ?? "غير معروف"}"؟`,
+);
+    if (!confirmed) return;
+
+    setDeletingPaymentId(payment.Id);
+    try {
+      await deletePayment(payment.Id);
+      setPayments((current) => current.filter((item) => item.Id !== payment.Id));
+      setSelectedPayment((current) => current?.Id === payment.Id ? null : current);
+      setRefreshKey((key) => key + 1);
+      window.dispatchEvent(new CustomEvent("amanah:payment-deleted", {
+        detail: { memberId: payment.MemberId },
+      }));
+      toast.success("تم حذف الدفعة بنجاح");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر حذف الدفعة");
+    } finally {
+      setDeletingPaymentId(null);
     }
   };
 
@@ -341,10 +373,20 @@ const totalAmount = centsToMoney(totalAmountCents);
                         <button
                           type="button"
                           className="row-action"
-                          title="تصحيح رقم الإيصال"
-                          onClick={() => openReceiptEditor(payment)}
+                          title="تعديل الدفعة"
+                          onClick={() => openPaymentEditor(payment)}
+                          disabled={deletingPaymentId === payment.Id}
                         >
                           <Pencil size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          className="row-action"
+                          title="حذف الدفعة نهائيًا"
+                          onClick={() => void handleDeletePayment(payment)}
+                          disabled={deletingPaymentId === payment.Id}
+                        >
+                          <Trash2 size={14} />
                         </button>
                       </td>
                     </tr>
@@ -470,73 +512,95 @@ const totalAmount = centsToMoney(totalAmountCents);
         </div>
       )}
 
-      {/* Edit Receipt Number */}
-      {receiptPayment && (
-        <div
-          className="modal-backdrop"
-          onMouseDown={(e) => {
-            if (e.target === e.currentTarget && !savingReceipt) {
-              setReceiptPayment(null);
-            }
-          }}
-        >
-          <section
-            className="payment-modal"
-            role="dialog"
-            aria-modal="true"
-          >
-            <header className="modal-header">
-              <div>
-                <div className="eyebrow">تعديل بيانات الإيصال</div>
-                <h2>تصحيح رقم الإيصال</h2>
+      {/* Edit Payment */}
+      {editingPayment && (
+        <div className="modal-backdrop" onMouseDown={(e) => {
+          if (e.target === e.currentTarget && !savingEdit) setEditingPayment(null);
+        }}>
+          <section className="payment-modal" role="dialog" aria-modal="true">
+            <header className="payment-edit-header">
+              <div className="payment-edit-heading">
+                <span className="payment-edit-eyebrow">المدفوعات / تعديل معاملة</span>
+                <h2>تعديل الدفعة</h2>
+                <p>حدّث بيانات الإيصال أو طريقة الدفع أو قيمة الدفعة</p>
               </div>
-
               <button
                 type="button"
-                className="icon-button"
-                onClick={() => setReceiptPayment(null)}
-                disabled={savingReceipt}
+                className="payment-edit-close"
+                onClick={() => setEditingPayment(null)}
+                disabled={savingEdit}
                 aria-label="إغلاق"
               >
                 <X size={19} />
               </button>
             </header>
 
-            <div className="modal-body">
-              <label>
-                <span className="field-label">رقم الإيصال الجديد</span>
-                <input
-                  value={receiptNumber}
-                  onChange={(e) => setReceiptNumber(e.target.value)}
-                  disabled={savingReceipt}
-                  placeholder="أدخل رقم الإيصال"
-                />
-              </label>
+            <div className="payment-edit-body">
+              <div className="payment-edit-fields">
+                <label className="payment-edit-field">
+                  <span>رقم الإيصال</span>
+                  <input
+                    value={editReceiptNumber}
+                    onChange={(e) => setEditReceiptNumber(e.target.value)}
+                    disabled={savingEdit}
+                    placeholder="أدخل رقم الإيصال"
+                    dir="auto"
+                  />
+                </label>
 
-              <p style={{ fontSize: 15 }} className="member-form-hint">
-                سيتم تصحيح رقم الإيصال فقط، ولن يتم تغيير المبلغ أو بيانات
-                الدفعة المالية.
-              </p>
+                <label className="payment-edit-field">
+                  <span>طريقة الدفع</span>
+                  <select
+                    value={editPaymentMethod}
+                    onChange={(e) => setEditPaymentMethod(e.target.value)}
+                    disabled={savingEdit}
+                  >
+                    <option value="CASH">نقدًا</option>
+                    <option value="INSTAPAY">إنستاباي</option>
+                  </select>
+                </label>
+
+                <label className="payment-edit-field payment-edit-amount-field">
+                  <span>المبلغ (ج.م)</span>
+                  <div className="payment-edit-amount-wrap">
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      value={editAmount}
+                      onChange={(e) => setEditAmount(e.target.value)}
+                      disabled={savingEdit}
+                      placeholder="0.00"
+                      inputMode="decimal"
+                    />
+                    <span>ج.م</span>
+                  </div>
+                </label>
+              </div>
+
+              <div className="payment-edit-notice">
+                <span className="payment-edit-notice-icon">i</span>
+                <p>عند تغيير المبلغ، سيعيد النظام توزيع مدفوعات العضو بالكامل وتحديث الرصيد والتوزيعات تلقائيًا.</p>
+              </div>
             </div>
 
-            <footer className="modal-footer">
+            <footer className="payment-edit-footer">
               <button
                 type="button"
-                className="button button-secondary"
-                onClick={() => setReceiptPayment(null)}
-                disabled={savingReceipt}
+                className="payment-edit-cancel"
+                onClick={() => setEditingPayment(null)}
+                disabled={savingEdit}
               >
                 إلغاء
               </button>
-
               <button
                 type="button"
-                className="button button-primary"
-                onClick={saveReceiptNumber}
-                disabled={savingReceipt}
+                className="payment-edit-save"
+                onClick={() => void savePaymentChanges()}
+                disabled={savingEdit}
               >
-                <CheckCircle2 size={16} />
-                {savingReceipt ? "جارٍ الحفظ..." : "حفظ التعديل"}
+                <Save size={17} />
+                {savingEdit ? "جارٍ حفظ التعديلات..." : "حفظ التعديلات"}
               </button>
             </footer>
           </section>

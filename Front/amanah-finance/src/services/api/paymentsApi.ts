@@ -110,13 +110,30 @@ export function createPayment(
   });
 }
 
-export function updatePaymentReceipt(
+export interface UpdatePaymentRequest {
+  ReceiptNumber?: string;
+  PaymentMethod?: string;
+  Amount?: number;
+}
+
+export function updatePayment(
   id: number,
-  receiptNumber: string,
+  body: UpdatePaymentRequest,
 ): Promise<PaymentRecord> {
-  return apiRequest<PaymentRecord>(`/payments/${id}/receipt-number`, {
+  return apiRequest<PaymentRecord>(`/payments/${id}`, {
     method: "PATCH",
-    body: JSON.stringify({ ReceiptNumber: receiptNumber }),
+    body: JSON.stringify(body),
+  });
+}
+
+export interface DeletePaymentResponse {
+  message: string;
+  paymentId: number;
+}
+
+export function deletePayment(id: number): Promise<DeletePaymentResponse> {
+  return apiRequest<DeletePaymentResponse>(`/payments/${id}`, {
+    method: "DELETE",
   });
 }
 export interface MemberPaymentAllocation {

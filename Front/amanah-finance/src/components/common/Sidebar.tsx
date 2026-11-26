@@ -8,8 +8,11 @@ import {
   ShieldCheck,
   Users,
   WalletCards,
+  BookOpen,
   X,
   UserPlus,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
@@ -26,6 +29,9 @@ export default function Sidebar({ mobileNav, onClose }: SidebarProps) {
     { to: "/dashboard", label: "لوحة التحكم", icon: LayoutDashboard },
     { to: "/members", label: "إدارة الأعضاء", icon: Users },
     { to: "/payments", label: "المدفوعات", icon: WalletCards },
+    { to: "/accounts", label: "دليل الحسابات", icon: BookOpen },
+    { to: "/revenues", label: "الإيرادات", icon: TrendingUp },
+    { to: "/expenses", label: "المصروفات", icon: TrendingDown },
     // { to: "/reports", label: "التقارير المالية", icon: FileText },
     { to: "/audit-logs", label: "سجل العمليات", icon: History },
     { to: "/add-member", label: "إضافة عضو جديد", icon: UserPlus },
